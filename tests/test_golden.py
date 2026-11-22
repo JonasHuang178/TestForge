@@ -12,12 +12,20 @@ Refresh after an intended template change:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from testforge.devices.registry import BUILTIN_ROOT, DeviceRegistry
 from testforge.service import GenerationService
-from tests.conftest import EXAMPLES, GOLDEN
 
 UPDATE = os.environ.get("UPDATE_GOLDEN") == "1"
+
+# Resolved from this file rather than imported from conftest: `tests` is not an
+# importable package, so a cross-module import only works when the repository
+# root happens to be on sys.path (as `python -m pytest` arranges but a bare
+# `pytest` does not).
+TESTS_DIR = Path(__file__).resolve().parent
+GOLDEN = TESTS_DIR / "golden"
+EXAMPLES = TESTS_DIR.parent / "examples"
 
 
 def test_generated_output_matches_golden() -> None:

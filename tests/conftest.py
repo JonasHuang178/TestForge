@@ -11,7 +11,6 @@ from testforge.service import GenerationService
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = REPO_ROOT / "examples"
-GOLDEN = Path(__file__).parent / "golden"
 
 
 @pytest.fixture(scope="session")
