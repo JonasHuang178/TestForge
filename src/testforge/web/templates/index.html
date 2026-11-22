@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TestForge</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <strong>TestForge</strong>
+    <span class="muted">從 markdown 測試計畫產生 C++ 測試程式碼</span>
+  </div>
+
+  <div class="controls">
+    <label>
+      Device
+      <select id="device" name="device_id">
+        {% for d in devices %}
+        <option value="{{ d.id }}" data-step-level="{{ d.step_heading_level }}"
+                data-naming="{{ d.naming }}" data-outputs="{{ d.outputs | join(', ') }}">
+          {{ d.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Case
+      <select id="case" name="case_selector"><option value="">全部</option></select>
+    </label>
+
+    <button type="button" id="toggle-advanced" class="ghost">進階</button>
+    <button type="button" id="generate" class="primary">產生程式碼</button>
+  </div>
+</header>
+
+<section id="advanced" class="advanced" hidden>
+  <label>
+    步驟標題層級
+    <select id="step-level">
+      <option value="">依 device 設定</option>
+      <option value="2">## （H2）</option>
+      <option value="3">### （H3）</option>
+      <option value="4">#### （H4）</option>
+    </select>
+  </label>
+  <label class="grow">
+    命名規則
+    <input type="text" id="naming" placeholder="留空則使用 device 預設">
+  </label>
+  <p class="hint muted" id="device-hint"></p>
+</section>
+
+<main class="panes">
+  <section class="pane">
+    <div class="pane-head">
+      <h2>測試計畫</h2>
+      <div class="pane-actions">
+        <button type="button" id="load-example" class="ghost">載入範例</button>
+        <label class="ghost filelabel">
+          開啟檔案<input type="file" id="file" accept=".md,.markdown,.txt" hidden>
+        </label>
+        <button type="button" id="clear" class="ghost">清除</button>
+      </div>
+    </div>
+    <textarea id="source" spellcheck="false"
+              placeholder="在這裡貼上 markdown 測試計畫，右側會即時顯示解析結果。"></textarea>
+    <p class="statusline muted" id="editor-status">&nbsp;</p>
+  </section>
+
+  <section class="pane">
+    <div class="pane-head">
+      <h2>解析結果</h2>
+      <span class="muted" id="preview-status"></span>
+    </div>
+    <div id="preview" class="scroll">
+      <p class="empty">貼上計畫後，這裡會顯示偵測到的 test case 與步驟。</p>
+    </div>
+  </section>
+</main>
+
+<section class="results">
+  <div class="pane-head">
+    <h2>產生結果</h2>
+  </div>
+  <div id="artifacts">
+    <p class="empty">按上方「產生程式碼」後，這裡會顯示產生的檔案。</p>
+  </div>
+</section>
+
+<form id="download-form" method="post" action="/download" hidden>
+  <input type="hidden" name="source">
+  <input type="hidden" name="device_id">
+  <input type="hidden" name="case_selector">
+  <input type="hidden" name="step_level">
+  <input type="hidden" name="naming_pattern">
+  <input type="hidden" name="what">
+  <input type="hidden" name="path">
+</form>
+
+<template id="example-plan">{{ example }}</template>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

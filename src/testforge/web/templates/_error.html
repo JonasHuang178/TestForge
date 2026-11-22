@@ -1,0 +1,21 @@
+<div class="banner error">
+  <strong>無法產生程式碼</strong>
+  <code class="pill">{{ code }}</code>
+  <p>{{ message }}</p>
+</div>
+
+{% if diagnostics %}
+<div class="diagnostics">
+  <h3>Diagnostics（{{ diagnostics | length }}）</h3>
+  <ul>
+    {% for d in diagnostics %}
+    <li class="d-{{ d.severity }}">
+      <span class="sev">{{ d.severity }}</span>
+      <code>{{ d.code }}</code>
+      {% if d.line %}<span class="muted">第 {{ d.line }} 行</span>{% endif %}
+      <span class="dmsg">{{ d.message }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

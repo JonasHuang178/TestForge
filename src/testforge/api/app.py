@@ -15,6 +15,7 @@ from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.staticfiles import StaticFiles
 
 from testforge import __version__
 from testforge.api.errors import register_error_handlers
@@ -22,6 +23,7 @@ from testforge.api.routers import devices, generations, health, parse
 from testforge.api.schemas.common import MAX_SOURCE_CHARS, ErrorBody, ErrorEnvelope
 from testforge.devices.registry import DeviceRegistry
 from testforge.service import GenerationService
+from testforge.web import routes as web_routes
 
 logger = logging.getLogger("testforge.api")
 
@@ -90,6 +92,16 @@ def create_app(device_roots: Iterable[Path] | None = None) -> FastAPI:
 
     for router in (health.router, devices.router, parse.router, generations.router):
         app.include_router(router, prefix=API_PREFIX)
+
+    # The web layer is a sibling of the API, not a client of it: its handlers
+    # call GenerationService directly. It is mounted last so that its catch-all
+    # root route cannot shadow an API path.
+    app.mount(
+        "/static",
+        StaticFiles(directory=str(web_routes.STATIC_DIR)),
+        name="static",
+    )
+    app.include_router(web_routes.router)
 
     return app
 

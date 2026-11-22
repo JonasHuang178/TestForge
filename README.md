@@ -13,11 +13,18 @@ markdown 計畫  ->  IR (TestCase/TestStep)  ->  code fragments  ->  組裝後�
 ```bash
 pip install -e '.[dev]'
 
+testforge serve                                       # 開啟 web 介面
+```
+
+然後瀏覽器開 **http://127.0.0.1:8000/**。這是給使用者操作的頁面：貼上計畫、即時看到解析結果、產生程式碼、下載。
+
+命令列同樣能做完整流程：
+
+```bash
 testforge devices                                     # 可以為哪些 device 生成
 testforge parse examples/sensor_init.md               # TestForge 讀到了什麼
 testforge generate examples/sensor_init.md \
     --device example_device --case 1 -o ./out         # 寫出檔案
-testforge serve                                       # REST API，文件在 /docs
 ```
 
 對同一個 `-o` 目錄再執行一次 `generate` 就是原地重新生成：只有 anchor 標記之間的區塊會被重寫，你在標記外手寫的任何東西都會保留。
@@ -30,7 +37,7 @@ testforge serve                                       # REST API，文件在 /do
 
 **無狀態。** 請求之間不保存任何東西。要重新生成某個檔案，客戶端把目前的內容放在 `existing_files` 送上來，拿回只有 anchor 區塊被重寫的版本。狀態留在持有檔案的那一方。
 
-**分層方向。** 所有對外層都依賴 `service`，彼此互不依賴。目前只有 `api/` 和 `cli.py`；日後若加上 web 層（`web/`，尚未實作），同一條規則適用——它直接呼叫 `service`，絕不透過 HTTP 回頭呼叫自己的 API。
+**分層方向。** `web/`、`api/` 和 `cli.py` 都依賴 `service`，彼此互不依賴。web 層直接呼叫 `service`，**絕不**透過 HTTP 回頭呼叫自己的 API——那會多一次序列化、多一個失敗模式，而且 debug 時 stack trace 會斷掉。
 
 **DTO 不等於 IR。** `api/schemas/` 是對外公布的契約；`core/models.py` 是內部的，可以自由演進。`api/mappers.py` 是唯一同時知道兩邊的地方。
 
@@ -49,9 +56,28 @@ src/testforge/
     registry.py      device 探索與查找
     builtin/         隨套件發行的 device
   service.py         GenerationService：唯一的 orchestrator
+  web/               伺服器渲染的操作頁面（Jinja2 + 原生 JS，零前端依賴）
   api/               FastAPI：schemas、routers、mappers、錯誤映射
-  cli.py             第二個消費端，用來確保 core 真的與 web 無關
+  cli.py             第三個消費端，用來確保 core 真的與 web 無關
 ```
+
+## Web 介面
+
+```bash
+testforge serve            # 預設 127.0.0.1:8000
+testforge serve --port 8080 --host 0.0.0.0
+```
+
+| 路徑 | 內容 |
+|---|---|
+| `/` | 操作頁面 |
+| `/docs` | REST API 的互動式文件 |
+
+頁面分三區：左邊貼上或開啟 markdown，右邊即時顯示偵測到的 case、步驟與 diagnostics（邊打字邊更新），下方顯示產生的檔案，可切換分頁、下載單檔或 zip。「進階」可覆寫步驟標題層級與命名規則。
+
+**零前端依賴。** 沒有 npm、沒有建置流程、沒有 CDN——伺服器渲染 HTML 片段，約 260 行原生 JS，語法高亮是自己寫的。裝置測試常在隔離網路上進行，從 CDN 載入資源會讓工具在沒有外網時直接壞掉。
+
+**下載是重新生成而不是快取。** 因為生成是確定性的，重跑的結果與畫面上顯示的完全一致，伺服器也就不需要保存任何東西。
 
 ## REST API
 

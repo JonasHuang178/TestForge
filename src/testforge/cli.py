@@ -142,10 +142,12 @@ def generate(
 @click.option("--port", default=8000, show_default=True)
 @click.option("--reload", is_flag=True, help="Reload on source changes (development).")
 def serve(host: str, port: int, reload: bool) -> None:
-    """Run the REST API. Interactive docs at /docs."""
+    """Run the web interface and the REST API."""
     import uvicorn
 
-    click.echo(f"TestForge API on http://{host}:{port}  (docs at /docs)")
+    click.secho(f"TestForge  ->  http://{host}:{port}", bold=True)
+    click.echo(f"  web 介面   http://{host}:{port}/")
+    click.echo(f"  API 文件   http://{host}:{port}/docs")
     uvicorn.run("testforge.api.app:app", host=host, port=port, reload=reload)
 
 

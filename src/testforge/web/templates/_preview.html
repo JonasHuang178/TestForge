@@ -1,0 +1,56 @@
+{% if empty %}
+  <p class="empty">貼上計畫後，這裡會顯示偵測到的 test case 與步驟。</p>
+{% else %}
+  {% if blocked %}
+    <p class="banner error">這份計畫目前無法產生程式碼，原因見下方 diagnostics。</p>
+  {% endif %}
+
+  {% for case in cases %}
+  <article class="case" data-title="{{ case.title }}" data-index="{{ case.index }}">
+    <h3>
+      <span class="idx">Case {{ case.index }}</span>
+      {{ case.title }}
+      {% if case.case_id %}<code class="pill">{{ case.case_id }}</code>{% endif %}
+    </h3>
+
+    {% if case.metadata %}
+    <dl class="meta">
+      {% for k, v in case.metadata.items() %}
+      <div><dt>{{ k }}</dt><dd>{{ v }}</dd></div>
+      {% endfor %}
+    </dl>
+    {% endif %}
+
+    <ol class="steps">
+      {% for step in case.steps %}
+      <li>
+        <span class="step-n">{{ "%02d"|format(step.index) }}</span>
+        <span class="step-title">{{ step.title }}</span>
+        {% if step.expected %}
+          <span class="tag ok" title="{{ step.expected }}">有預期結果</span>
+        {% else %}
+          <span class="tag none">無預期結果</span>
+        {% endif %}
+        <span class="muted line">第 {{ step.source_line }} 行</span>
+      </li>
+      {% endfor %}
+    </ol>
+  </article>
+  {% endfor %}
+
+  {% if diagnostics %}
+  <div class="diagnostics">
+    <h3>Diagnostics（{{ diagnostics | length }}）</h3>
+    <ul>
+      {% for d in diagnostics %}
+      <li class="d-{{ d.severity }}">
+        <span class="sev">{{ d.severity }}</span>
+        <code>{{ d.code }}</code>
+        {% if d.line %}<span class="muted">第 {{ d.line }} 行</span>{% endif %}
+        <span class="dmsg">{{ d.message }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+{% endif %}

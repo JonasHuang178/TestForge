@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import io
-import re
-import zipfile
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -13,15 +10,10 @@ from testforge.api.schemas.common import ErrorEnvelope
 from testforge.api.schemas.generations import GenerateRequest, GenerateResponse
 from testforge.core.errors import OutputFormatError
 from testforge.core.models import GenerationResult
+from testforge.packaging import artifacts_to_zip, safe_filename, zip_filename
 from testforge.service import GenerationService
 
 router = APIRouter(tags=["generations"])
-
-#: A fixed timestamp keeps the zip byte-identical across runs, which matters
-#: because the same determinism is what golden-file tests rely on.
-_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
-
-_UNSAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 class MultipleArtifactsError(OutputFormatError):
@@ -75,23 +67,13 @@ def create_generation(
     return generate_response(result)
 
 
-def _safe_filename(name: str) -> str:
-    cleaned = _UNSAFE_FILENAME.sub("_", name).strip("_")
-    return cleaned or "generated"
-
-
 def _zip_response(result: GenerationResult) -> Response:
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for artifact in result.artifacts:
-            info = zipfile.ZipInfo(artifact.path, date_time=_ZIP_EPOCH)
-            info.external_attr = 0o644 << 16
-            archive.writestr(info, artifact.content)
-    filename = _safe_filename(f"{result.device_id}_generated") + ".zip"
     return Response(
-        content=buffer.getvalue(),
+        content=artifacts_to_zip(result),
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_filename(result)}"'
+        },
     )
 
 
@@ -108,6 +90,6 @@ def _single_file_response(result: GenerationResult) -> Response:
         content=artifact.content,
         media_type="text/plain; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="{_safe_filename(artifact.path)}"'
+            "Content-Disposition": f'attachment; filename="{safe_filename(artifact.path)}"'
         },
     )

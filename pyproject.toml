@@ -27,7 +27,8 @@ testforge = "testforge.cli:_run"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"testforge.devices" = ["builtin/**/*.yaml", "builtin/**/*.j2"]
+"testforge.devices" = ["builtin/**/*.yaml", "builtin/**/*.j2", "builtin/**/*.h"]
+"testforge.web" = ["templates/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
