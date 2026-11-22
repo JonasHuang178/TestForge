@@ -1,9 +1,39 @@
+# Python
 __pycache__/
 *.py[cod]
-.pytest_cache/
-*.egg-info/
+*.so
+.Python
+
+# Packaging / build
 build/
 dist/
+*.egg-info/
+
+# Virtual environments
 .venv/
 venv/
+env/
+
+# Test and type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# TestForge generated output (the README uses ./out as the target)
 out/
+
+# Claude Code: shared config is committed, per-machine settings are not
+.claude/settings.local.json
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Local secrets
+.env
+.env.*
