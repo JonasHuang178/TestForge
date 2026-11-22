@@ -1,0 +1,26 @@
+{% for step in steps %}
+// ---------------------------------------------------------------------------
+// Step {{ step.index }}: {{ step.title }}
+// Plan line {{ step.source_line }}
+{% if step.description_md %}
+//
+{{ step.description_md | cpp_comment('//   ') }}
+{% endif %}
+{% if step.has_expected %}
+//
+//   Expected: {{ step.expected }}
+{% endif %}
+// ---------------------------------------------------------------------------
+void {{ step.function_name }}(TestContext& ctx) {
+  ctx.Log("{{ step.title | cpp_string }}");
+
+  // TODO(testforge): drive the device to perform this step.
+{% if step.has_expected %}
+
+  // An unimplemented step reports failure on purpose: a test that silently
+  // passes before anyone has written it is worse than one that is red.
+  TESTFORGE_EXPECT(ctx, false, "{{ step.expected | cpp_string }}");
+{% endif %}
+}
+
+{% endfor %}

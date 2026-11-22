@@ -1,0 +1,4 @@
+{% for step in steps %}
+/// Step {{ step.index }}: {{ step.title }}
+void {{ step.function_name }}(TestContext& ctx);
+{% endfor %}
