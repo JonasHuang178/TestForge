@@ -30,7 +30,7 @@ testforge serve                                       # REST API，文件在 /do
 
 **無狀態。** 請求之間不保存任何東西。要重新生成某個檔案，客戶端把目前的內容放在 `existing_files` 送上來，拿回只有 anchor 區塊被重寫的版本。狀態留在持有檔案的那一方。
 
-**分層方向。** `api/` 和 `web/` 都依賴 `service`，彼此互不依賴；web 層絕不透過 HTTP 回頭呼叫自己的 API。
+**分層方向。** 所有對外層都依賴 `service`，彼此互不依賴。目前只有 `api/` 和 `cli.py`；日後若加上 web 層（`web/`，尚未實作），同一條規則適用——它直接呼叫 `service`，絕不透過 HTTP 回頭呼叫自己的 API。
 
 **DTO 不等於 IR。** `api/schemas/` 是對外公布的契約；`core/models.py` 是內部的，可以自由演進。`api/mappers.py` 是唯一同時知道兩邊的地方。
 
