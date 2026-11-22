@@ -18,7 +18,7 @@ from testforge.api.schemas.common import MAX_SOURCE_CHARS, ErrorBody, ErrorEnvel
 from testforge.core.errors import (
     AnchorError,
     DeviceNotFoundError,
-    ManifestError,
+    DeviceDefinitionError,
     NamingPatternError,
     OutputFormatError,
     TemplateRenderError,
@@ -39,7 +39,7 @@ _STATUS_BY_TYPE: tuple[tuple[type[TestForgeError], int], ...] = (
     (NamingPatternError, status.HTTP_400_BAD_REQUEST),
     (OutputFormatError, status.HTTP_400_BAD_REQUEST),
     # Both of these mean the device itself is broken: our fault, not the caller's.
-    (ManifestError, status.HTTP_500_INTERNAL_SERVER_ERROR),
+    (DeviceDefinitionError, status.HTTP_500_INTERNAL_SERVER_ERROR),
     (TemplateRenderError, status.HTTP_500_INTERNAL_SERVER_ERROR),
 )
 

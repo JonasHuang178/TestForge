@@ -21,7 +21,7 @@
       <select id="device" name="device_id">
         {% for d in devices %}
         <option value="{{ d.id }}" data-step-level="{{ d.step_heading_level }}"
-                data-naming="{{ d.naming }}" data-outputs="{{ d.outputs }}">
+                data-rules="{{ d.rules }}">
           {{ d.name }}
         </option>
         {% endfor %}
@@ -47,10 +47,6 @@
       <option value="3">### （H3）</option>
       <option value="4">#### （H4）</option>
     </select>
-  </label>
-  <label class="grow">
-    命名規則
-    <input type="text" id="naming" placeholder="留空則使用 device 預設">
   </label>
   <p class="hint muted" id="device-hint"></p>
 </section>
@@ -97,7 +93,6 @@
   <input type="hidden" name="device_id">
   <input type="hidden" name="case_selector">
   <input type="hidden" name="step_level">
-  <input type="hidden" name="naming_pattern">
   <input type="hidden" name="what">
   <input type="hidden" name="path">
 </form>

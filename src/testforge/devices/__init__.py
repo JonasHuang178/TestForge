@@ -1,5 +1,6 @@
-"""Device definitions: declarative manifests plus their Jinja2 templates.
+"""Loading and looking up devices.
 
-Adding a device means adding a directory here (or on TESTFORGE_DEVICE_PATH).
-It requires no Python changes.
+A device lives in its own folder under ./devices (or on TESTFORGE_DEVICE_PATH)
+and is defined by the device.py it contains. Nothing here is shipped with the
+package: the devices are the project's own.
 """

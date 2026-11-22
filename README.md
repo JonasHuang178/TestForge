@@ -6,7 +6,7 @@
 markdown 計畫  ->  IR (TestCase/TestStep)  ->  code fragments  ->  組裝後的 C++
 ```
 
-真正重要的契約只有兩個：**IR**（一份計畫的語意是什麼）和 **device manifest**（某個目標如何把那個語意變成檔案）。其餘部分都是可替換的。
+真正重要的契約只有兩個：**IR**（一份計畫的語意是什麼）和 **device**（某個目標如何把那個語意變成檔案）。其餘部分都是可替換的。
 
 ## 快速開始
 
@@ -72,17 +72,13 @@ testforge generate examples/sensor_init.md \
 ```
 src/testforge/
   core/              純邏輯，零 web 依賴
-    models.py        IR：TestCase, TestStep, CodeFragment, GeneratedArtifact
+    models.py        IR：TestCase, TestStep, GeneratedArtifact
     parser.py        markdown -> IR，走 markdown-it 的 token stream
-    naming.py        步驟標題 -> C++ 識別碼
-    assembler.py     基於 anchor 的程式碼注入
-    templating.py    Jinja2 環境與 filter
+    assembler.py     anchor 注入、換行保留
   device_api.py      device.py 會 import 的公開介面
   devices/
     python_device.py device.py 的載入與契約檢查
-    manifest.py      manifest schema，載入時完整驗證
     registry.py      device 探索與查找
-    builtin/         隨套件發行的 device
   service.py         GenerationService：唯一的 orchestrator
   web/               伺服器渲染的操作頁面（Jinja2 + 原生 JS，零前端依賴）
   api/               FastAPI：schemas、routers、mappers、錯誤映射
@@ -143,7 +139,7 @@ POST /api/v1/generations?format=file   text/plain        僅限單一 artifact
 | 404 | `device_id` 不存在 |
 | 413 | `source` 超過大小上限 |
 | 422 | 計畫產生不出可用的 case，或 `existing_files` 缺少 anchor |
-| 500 | manifest 或模板有問題——這是我們的錯，細節寫進 log 而不回傳 |
+| 500 | device 模組或模板有問題——這是我們的錯，細節寫進 log 而不回傳 |
 
 anchor 的問題回 422 而不是 409：它的本質是「你給的這份輸入我處理不了」，不是客戶端該重試的併發衝突。
 
@@ -187,16 +183,19 @@ Drive the enable line high and wait for the regulator to settle.
 
 ```
 devices/
-  demo_board/
-    device.py                 # 你寫的規則：命名、輸出哪些檔、填什麼內容
-    test_case.h               # 範本，含 anchor 標記
+  simple_cpp/                 # 最小範例：一個 case 產生一個獨立的 .cpp
+    device.py
+    test_case.cpp
+  demo_board/                 # 較完整：header + source
+    device.py
+    test_case.h
     test_case.cpp
     demo_board_runtime.h      # 參考 runtime，不參與生成
   my_board/
     ...
 ```
 
-把 `devices/demo_board/` 複製一份改名就能開始。資料夾名稱必須和 `device.py` 裡的 `ID` 一致。TestForge 會從套件內建的 device、專案根目錄的 `./devices/`，以及 `TESTFORGE_DEVICE_PATH` 載入；後面的會蓋掉前面同名的。
+從 `devices/simple_cpp/` 開始最容易——它只產生一個檔案、自帶 `main()`、編譯後能直接執行。要 header 與 source 分開就看 `devices/demo_board/`。複製一份改名就能開始。資料夾名稱必須和 `device.py` 裡的 `ID` 一致。TestForge 會從套件內建的 device、專案根目錄的 `./devices/`，以及 `TESTFORGE_DEVICE_PATH` 載入；後面的會蓋掉前面同名的。
 
 ### device.py 的契約
 
@@ -244,18 +243,24 @@ def build(case):
 
 所以你只要負責「產生什麼」，不必處理「怎麼安全地寫回檔案」。
 
+### 自訂 anchor 標記
+
+預設標記是 `// === TESTFORGE:{name}:BEGIN ===`。產生舊式 C（`//` 不是合法註解）時，在 `device.py` 裡覆寫：
+
+```python
+ANCHOR_BEGIN = "/* === TESTFORGE:{name}:BEGIN === */"
+ANCHOR_END   = "/* === TESTFORGE:{name}:END === */"
+```
+
 ### 試一下
 
 ```bash
-testforge generate examples/demo_board_plan.md --device demo_board -o ./out
-cd out && cp ../devices/demo_board/demo_board_runtime.h .
-# 補一個 main() 呼叫 demo_board::RunLEDBlink(ctx)
-g++ -std=c++17 -Wall -Wextra -Werror -o runner main.cpp test_led_blink.cpp
+# 最小範例：產出一個可直接編譯執行的檔案
+testforge generate examples/simple_plan.md --device simple_cpp -o ./out
+cd out && g++ -std=c++17 -Wall -Wextra -Werror -o runner test_button_press.cpp && ./runner
 ```
 
-### 另一種寫法：manifest.yaml
-
-較早的宣告式 device（`manifest.yaml` + Jinja2 範本）仍然可用，內建的 `example_device` 就是。規則單純時它比較短，但表達力不如 Python。兩種都支援，`testforge devices` 會標示每個 device 是哪一種。
+exit code 是 1、每步都 FAIL 才正確：步驟都還是未實作的 TODO，而未實作的測試應該是紅的。
 
 ## 測試
 

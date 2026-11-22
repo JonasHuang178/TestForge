@@ -15,20 +15,16 @@ PLAN = (
 def test_health(client: TestClient) -> None:
     body = client.get("/api/v1/health").json()
     assert body["status"] == "ok"
-    assert body["devices"] == 1
+    assert body["devices"] == 2
 
 
 def test_list_and_get_device(client: TestClient) -> None:
     listed = client.get("/api/v1/devices").json()["devices"]
-    assert [d["id"] for d in listed] == ["example_device"]
+    assert [d["id"] for d in listed] == ["demo_board", "simple_cpp"]
 
-    detail = client.get("/api/v1/devices/example_device").json()
-    assert detail["step_function_pattern"] == "TestStep_{index:02d}_{pascal_title}"
+    detail = client.get("/api/v1/devices/demo_board").json()
+    assert detail["step_heading_level"] == 2
     assert detail["anchor"]["begin"] == "// === TESTFORGE:{name}:BEGIN ==="
-    assert [o["anchors"] for o in detail["outputs"]] == [
-        ["STEP_DECLS"],
-        ["STEP_CALLS", "STEP_DEFS"],
-    ]
 
 
 def test_unknown_device_is_404_with_the_envelope(client: TestClient) -> None:
@@ -36,7 +32,7 @@ def test_unknown_device_is_404_with_the_envelope(client: TestClient) -> None:
     assert response.status_code == 404
     body = response.json()
     assert body["error"]["code"] == "device_not_found"
-    assert body["error"]["details"]["known"] == ["example_device"]
+    assert body["error"]["details"]["known"] == ["demo_board", "simple_cpp"]
     assert body["diagnostics"] == []
 
 
@@ -70,7 +66,7 @@ def test_unusable_plan_is_422_carrying_diagnostics(client: TestClient) -> None:
 
 def test_generation_returns_201_and_artifacts(client: TestClient) -> None:
     response = client.post(
-        "/api/v1/generations", json={"source": PLAN, "device_id": "example_device"}
+        "/api/v1/generations", json={"source": PLAN, "device_id": "demo_board"}
     )
     assert response.status_code == 201
     body = response.json()
@@ -85,12 +81,12 @@ def test_generation_returns_201_and_artifacts(client: TestClient) -> None:
 
 def test_existing_files_round_trip_reports_updated(client: TestClient) -> None:
     first = client.post(
-        "/api/v1/generations", json={"source": PLAN, "device_id": "example_device"}
+        "/api/v1/generations", json={"source": PLAN, "device_id": "demo_board"}
     ).json()
     existing = [{"path": a["path"], "content": a["content"]} for a in first["artifacts"]]
     second = client.post(
         "/api/v1/generations",
-        json={"source": PLAN, "device_id": "example_device", "existing_files": existing},
+        json={"source": PLAN, "device_id": "demo_board", "existing_files": existing},
     ).json()
     assert [a["mode"] for a in second["artifacts"]] == ["updated", "updated"]
     assert [a["content"] for a in second["artifacts"]] == [
@@ -103,7 +99,7 @@ def test_existing_file_without_anchors_is_422(client: TestClient) -> None:
         "/api/v1/generations",
         json={
             "source": PLAN,
-            "device_id": "example_device",
+            "device_id": "demo_board",
             "existing_files": [{"path": "test_sensor_init.h", "content": "// empty\n"}],
         },
     )
@@ -114,29 +110,16 @@ def test_existing_file_without_anchors_is_422(client: TestClient) -> None:
 def test_unknown_field_is_400_not_422(client: TestClient) -> None:
     response = client.post(
         "/api/v1/generations",
-        json={"source": PLAN, "device_id": "example_device", "nameing_pattern": "x"},
+        json={"source": PLAN, "device_id": "demo_board", "nameing_pattern": "x"},
     )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "request_invalid"
 
 
-def test_bad_naming_pattern_is_400(client: TestClient) -> None:
-    response = client.post(
-        "/api/v1/generations",
-        json={
-            "source": PLAN,
-            "device_id": "example_device",
-            "options": {"naming_pattern": "Step_{bogus}"},
-        },
-    )
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "naming.pattern_invalid"
-
-
 def test_oversized_source_is_413(client: TestClient) -> None:
     response = client.post(
         "/api/v1/generations",
-        json={"source": "x" * 1_000_001, "device_id": "example_device"},
+        json={"source": "x" * 1_000_001, "device_id": "demo_board"},
     )
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "source_too_large"
@@ -153,7 +136,7 @@ def test_validation_error_does_not_echo_the_submitted_source(client: TestClient)
 
 
 def test_zip_format_is_deterministic(client: TestClient) -> None:
-    payload = {"source": PLAN, "device_id": "example_device"}
+    payload = {"source": PLAN, "device_id": "demo_board"}
     first = client.post("/api/v1/generations?format=zip", json=payload)
     second = client.post("/api/v1/generations?format=zip", json=payload)
     assert first.status_code == 200
@@ -166,7 +149,7 @@ def test_zip_format_is_deterministic(client: TestClient) -> None:
 
 def test_file_format_needs_exactly_one_artifact(client: TestClient) -> None:
     response = client.post(
-        "/api/v1/generations?format=file", json={"source": PLAN, "device_id": "example_device"}
+        "/api/v1/generations?format=file", json={"source": PLAN, "device_id": "demo_board"}
     )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "format.multiple_artifacts"

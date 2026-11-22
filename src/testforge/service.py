@@ -1,8 +1,7 @@
-"""The orchestrator both the API and the CLI call.
+"""The orchestrator every surface calls.
 
-Everything the web layer does goes through here. ``api/`` and ``web/`` depend
-on this module and never on each other, and neither of them re-enters the
-application over HTTP.
+The web page, the REST API and the CLI all go through here. None of them talk
+to each other, and none of them reach into a device directly.
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ import uuid
 from testforge.core.assembler import inject
 from testforge.core.diagnostics import DiagnosticCollector
 from testforge.core.errors import UnprocessableDocumentError
-from testforge.core.fragments import build_context, output_view, step_views
 from testforge.core.models import (
     ExistingFile,
     GeneratedArtifact,
@@ -21,18 +19,12 @@ from testforge.core.models import (
     ParseResult,
     TestCase,
 )
-from testforge.core.naming import StepNamer, case_fields
 from testforge.core.options import GenerateOptions, ParseOptions
 from testforge.core.parser import MarkdownTestPlanParser
-from testforge.core.templating import render
-from testforge.devices.manifest import AnchorStyle, DeviceManifest
-from testforge.devices.registry import DeviceRegistry, LoadedDevice
+from testforge.devices.python_device import PythonDevice
+from testforge.devices.registry import DeviceRegistry
 
 _PARSE_KEYS = frozenset(ParseOptions.model_fields)
-
-#: Python devices do not declare their marker spelling; one spelling for all of
-#: them keeps a template copied between devices working unchanged.
-PYTHON_DEVICE_ANCHOR = AnchorStyle()
 
 
 class GenerationService:
@@ -59,7 +51,7 @@ class GenerationService:
         """Read a plan without generating anything.
 
         ``device_id`` is optional and only used to pick up that device's
-        heading conventions, so the preview matches what generation will see.
+        heading conventions, so a preview matches what generation will see.
         """
         effective = options or ParseOptions()
         if device_id is not None:
@@ -110,7 +102,7 @@ class GenerationService:
 
         for case in cases:
             case_artifacts, case_functions = self._generate_case(
-                device, case, effective, existing, diag, seen_paths
+                device, case, existing, diag, seen_paths
             )
             artifacts.extend(case_artifacts)
             functions.extend(case_functions)
@@ -131,83 +123,20 @@ class GenerationService:
 
     def _generate_case(
         self,
-        device: LoadedDevice,
-        case: TestCase,
-        options: GenerateOptions,
-        existing: dict[str, str],
-        diag: DiagnosticCollector,
-        seen_paths: dict[str, int],
-    ) -> tuple[list[GeneratedArtifact], list[str]]:
-        if device.python is not None:
-            return self._generate_case_python(device, case, existing, diag, seen_paths)
-        manifest = device.manifest
-        pattern = options.naming_pattern or manifest.naming.step_function
-        namer = StepNamer(pattern, case, device.id, diag)
-        steps = step_views(case, namer)
-        fields = case_fields(case, device.id)
-
-        resolved = [
-            output_view(spec.path.format(**fields)) for spec in manifest.outputs
-        ]
-
-        artifacts: list[GeneratedArtifact] = []
-        for spec, view in zip(manifest.outputs, resolved):
-            path = view["path"]
-            if path in seen_paths:
-                diag.warning(
-                    "output.path_collision",
-                    f"Case {case.index} writes {path!r}, which case "
-                    f"{seen_paths[path]} already produced; the later one wins.",
-                    line=case.source_line,
-                    case_index=case.index,
-                )
-            seen_paths[path] = case.index
-
-            context = build_context(
-                device_id=device.id,
-                device_name=manifest.name,
-                case=case,
-                steps=steps,
-                current_output=view,
-                all_outputs=resolved,
-            )
-
-            base = existing.get(path)
-            mode = "updated" if base is not None else "created"
-            if base is None:
-                base = render(device.environment, spec.template, context)
-
-            fragments = {
-                anchor: render(device.environment, template, context)
-                for anchor, template in spec.fragments.items()
-            }
-            content, filled = inject(base, fragments, manifest.anchor)
-
-            artifacts.append(
-                GeneratedArtifact(
-                    path=path, content=content, mode=mode, anchors_filled=filled
-                )
-            )
-
-        return artifacts, [str(s["function_name"]) for s in steps]
-
-    def _generate_case_python(
-        self,
-        device: LoadedDevice,
+        device: PythonDevice,
         case: TestCase,
         existing: dict[str, str],
         diag: DiagnosticCollector,
         seen_paths: dict[str, int],
     ) -> tuple[list[GeneratedArtifact], list[str]]:
-        """Generate one case with a device whose rules are written in Python.
+        """Build one case.
 
-        The device decides the filenames, the function names and the code; the
-        framework still owns anchor injection, so idempotent regeneration and
-        line-ending preservation hold whatever the device does.
+        The device decides the filenames, the function names and the code. The
+        framework owns anchor injection, so idempotent regeneration and
+        line-ending preservation hold whatever the device's module does.
         """
-        python = device.python
-        info = python.case_info(case)
-        outputs = python.build(info)
+        info = device.case_info(case)
+        outputs = device.build(info)
 
         artifacts: list[GeneratedArtifact] = []
         for spec in outputs:
@@ -227,7 +156,7 @@ class GenerationService:
             if base is None:
                 base = spec.skeleton
 
-            content, filled = inject(base, spec.anchors, PYTHON_DEVICE_ANCHOR)
+            content, filled = inject(base, spec.anchors, device.anchor_style)
             artifacts.append(
                 GeneratedArtifact(
                     path=path, content=content, mode=mode, anchors_filled=filled
@@ -248,21 +177,13 @@ class GenerationService:
 
     @classmethod
     def _merge_generate_options(
-        cls, device: LoadedDevice, options: GenerateOptions | None
+        cls, device: PythonDevice, options: GenerateOptions | None
     ) -> GenerateOptions:
-        """Device manifest supplies the defaults; the request overrides them.
+        """The device supplies the defaults; the request overrides them.
 
-        Only fields the caller actually sent are treated as overrides, so an
-        unset field falls back to the manifest rather than to the schema
-        default.
+        Only fields the caller actually sent count as overrides, so omitting
+        one falls back to the device rather than to the schema default.
         """
         base = cls._merge_parse_options(device.parse_options, options).model_dump()
         provided = {} if options is None else options.model_dump(exclude_unset=True)
-        default_pattern = (
-            device.manifest.naming.step_function if device.manifest else None
-        )
-        return GenerateOptions(
-            **base,
-            naming_pattern=provided.get("naming_pattern") or default_pattern,
-            case_selector=provided.get("case_selector"),
-        )
+        return GenerateOptions(**base, case_selector=provided.get("case_selector"))

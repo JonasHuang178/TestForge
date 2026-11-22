@@ -33,16 +33,15 @@ contract SHALL state that it is not a resource identifier and cannot be fetched.
 
 ### Requirement: Devices are discoverable over HTTP
 
-The API SHALL expose the available devices and, for one device, enough detail for
-a client to present it and pre-fill its options: its naming pattern, its plan
-heading levels, its anchor marker spelling and its output filename patterns with
-the anchors each carries.
+The API SHALL expose the available devices and, for one device, enough detail
+for a client to present it and pre-fill its options: its plan heading levels
+and its anchor marker spelling. Filenames and function names are decided per
+case inside the device's module, so they are not published here.
 
 #### Scenario: Device detail
 
 - **WHEN** a client requests a known device
-- **THEN** the response carries its naming pattern, heading levels, anchor
-  markers and per-output anchor lists
+- **THEN** the response carries its heading levels and its anchor markers
 
 #### Scenario: Unknown device
 
@@ -88,9 +87,9 @@ preserved, and the artifact SHALL be reported as updated rather than created.
 ### Requirement: Status codes distinguish fault and cause
 
 The API SHALL assign status codes by who must act and why: 400 for a body that
-does not match the schema or an invalid naming pattern, 404 for an unknown
-device, 413 for input over the size limit, 422 for input whose content cannot be
-used, and 5xx for a defective device or template.
+does not match the schema, 404 for an unknown device, 413 for input over the
+size limit, 422 for input whose content cannot be used, and 5xx for a
+defective device or template.
 
 #### Scenario: Schema violation is a client error, not unprocessable content
 
@@ -142,13 +141,13 @@ misspelled option is reported instead of silently falling back to a default.
 
 #### Scenario: Misspelled option
 
-- **WHEN** a request carries `nameing_pattern` instead of the documented field
-- **THEN** the request is rejected rather than generated with the default pattern
+- **WHEN** a request carries a misspelling of a documented option field
+- **THEN** the request is rejected rather than generated with the default
 
 ### Requirement: Options default to the device, not the schema
 
-A generation option the caller omits SHALL fall back to the device manifest's
-value rather than to a schema default, so omitting an option is always safe.
+A generation option the caller omits SHALL fall back to the device's own value
+rather than to a schema default, so omitting an option is always safe.
 
 #### Scenario: Partial override
 

@@ -8,7 +8,7 @@ from testforge.api.schemas.common import MAX_SOURCE_CHARS, DiagnosticOut
 class ParseOptionsIn(BaseModel):
     """Overrides for the device's own heading conventions.
 
-    Any field left out falls back to the device manifest, not to the schema
+    Any field left out falls back to the device's own setting, not to the schema
     default, so omitting the object entirely is always safe.
     """
 

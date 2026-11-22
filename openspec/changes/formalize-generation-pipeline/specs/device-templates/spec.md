@@ -3,113 +3,149 @@
 ## Purpose
 
 Defines the contract between TestForge and a generation target. A device
-declares, as data, how its test plans are written and what files come out, so a
-team can add or change a target without changing TestForge's code.
+supplies the rules that differ between targets — naming, filenames, emitted
+code — while the framework keeps the guarantees that must hold for all of
+them, so adding a target never means re-implementing safe code injection.
 
 ## ADDED Requirements
 
-### Requirement: A device is declarative
+### Requirement: A device is a folder holding a module and its templates
 
-Adding or modifying a device SHALL require only data and template files, never
-changes to application code. A device SHALL consist of a manifest plus the
-templates it references.
+A device SHALL consist of one Python module plus the source files it fills in.
+Adding or changing a device SHALL require no change to application code, and a
+device's identity SHALL match its folder name so devices stay findable.
 
-#### Scenario: New device added without code changes
+#### Scenario: New device added without touching the application
 
-- **WHEN** a directory containing a valid manifest and its templates is placed
-  on a device search path
-- **THEN** that device becomes available for generation with no code change and
-  no redeployment of application logic
+- **WHEN** a folder containing a device module and its templates is placed on
+  a device search path
+- **THEN** that device becomes available for generation with no code change
 
-### Requirement: Manifest declares the full generation contract
+#### Scenario: Identity does not match its folder
 
-A manifest SHALL declare the device's identity, its plan heading conventions, its
-step naming pattern, its anchor marker spelling, and its output files. Each
-output SHALL declare its filename pattern, its skeleton template, and which
-fragment template fills which anchor.
+- **WHEN** a module declares an identity different from its folder name
+- **THEN** loading that device fails
 
-#### Scenario: Multi-file output
+### Requirement: The module owns naming, filenames and emitted code
 
-- **WHEN** a manifest declares a header output carrying one anchor and a source
-  output carrying two
-- **THEN** generating one case produces both files
-- **AND** each file reports exactly the anchors it carries
+A device module SHALL decide what a step's function is called, which files a
+case produces, and what code goes into each anchored region. These SHALL be
+expressed as code, not configuration, because the rules differ between targets
+in ways a fixed schema cannot describe.
 
-#### Scenario: Filename derived from the case
+#### Scenario: One case, one self-contained file
 
-- **WHEN** an output declares the filename pattern `test_{case_snake}.cpp`
-- **THEN** a case titled `Sensor Fault Recovery` produces `test_sensor_fault_recovery.cpp`
+- **WHEN** a device's module returns a single output for a case
+- **THEN** generation produces exactly that file
 
-### Requirement: Template context is a stable contract
+#### Scenario: One case, a header and a source file
 
-The set of values available to templates SHALL be a documented contract covering
-the device, the case, its steps with their resolved function names, the file
-being produced, and every file produced for that case. Templates SHALL be able
-to reference sibling outputs so a source file can include its own header.
+- **WHEN** a device's module returns a header and a source output
+- **THEN** both are produced, each carrying only the anchors it declares
 
-#### Scenario: Source file includes its generated header
+#### Scenario: The naming rule is the module's
 
-- **WHEN** a source template references the sibling output whose extension is `.h`
-- **THEN** the generated source includes that header by its generated filename
+- **WHEN** two devices name the same step differently
+- **THEN** each device's generated code uses its own name, with no shared
+  pattern language in between
 
-#### Scenario: Step function names are supplied, not derived in templates
+### Requirement: A module declares a minimum contract, checked at load
 
-- **WHEN** a fragment template renders a step
-- **THEN** the step's resolved C++ function name is available directly, so the
-  template performs no identifier construction of its own
+A device module SHALL declare its identity, its display name, how a step
+becomes a function name, and how a case becomes output files. The contract
+SHALL be checked when the registry loads, so a defective device stops startup
+rather than failing a user's first request.
 
-### Requirement: Manifests are validated when loaded
+#### Scenario: Required definition missing
 
-A device SHALL be validated at load time and a defect SHALL prevent startup
-rather than surface on a user's first request. Validation SHALL cover schema
-conformance, unknown keys, identity matching the directory name, referenced
-template files existing, placeholder validity in naming and filename patterns,
-and anchor markers carrying a name placeholder.
+- **WHEN** a module omits one of the required definitions
+- **THEN** loading fails and the error names what is missing
 
-#### Scenario: Referenced template is missing
+#### Scenario: Module raises while being imported
 
-- **WHEN** a manifest names a template file that does not exist
-- **THEN** loading fails and the error names the missing file
+- **WHEN** importing a device module raises
+- **THEN** loading fails and the error names the exception
 
-#### Scenario: Identity does not match its directory
+#### Scenario: Naming rule returns nothing usable
 
-- **WHEN** a manifest's identifier differs from its directory name
-- **THEN** loading fails, so devices stay findable by name
+- **WHEN** a module's naming rule returns an empty value for a step
+- **THEN** generation fails with an error naming the device and the step,
+  rather than emitting a file with a nameless function
 
-#### Scenario: Unknown manifest key
+#### Scenario: Module returns the wrong kind of thing
 
-- **WHEN** a manifest contains a misspelled top-level key
-- **THEN** loading fails rather than silently ignoring it
+- **WHEN** a module's build step returns something other than output
+  descriptions
+- **THEN** generation fails with an error naming the device
 
-#### Scenario: Step placeholder used in a filename
+### Requirement: Templates are plain source files with placeholders
 
-- **WHEN** an output filename pattern references a step-level placeholder, for
-  which no step is in scope at file level
-- **THEN** loading fails and the error names that placeholder
+A template SHALL be an ordinary source file in the device's folder, carrying
+the device's anchor markers. Placeholder substitution SHALL use a syntax that
+cannot occur in C or C++ by accident, and SHALL apply only when an output file
+is first created.
+
+#### Scenario: Placeholders filled on creation
+
+- **WHEN** a case is generated into a file that does not exist yet
+- **THEN** the template's placeholders are replaced with the module's values
+- **AND** no placeholder remains in the output
+
+#### Scenario: Placeholder with no value supplied
+
+- **WHEN** a template uses a placeholder the module supplies no value for
+- **THEN** generation fails and the error names the placeholder
+
+#### Scenario: Placeholders are not reapplied on regeneration
+
+- **WHEN** an existing file is regenerated
+- **THEN** only its anchored regions change; text that came from a placeholder
+  is left as the file has it
+
+#### Scenario: Template file missing
+
+- **WHEN** a module names a template that is not in its folder
+- **THEN** generation fails and the error names the device and the template
+
+### Requirement: A device may choose its anchor marker spelling
+
+A device SHALL be able to declare how its begin and end markers are written,
+so a target whose language has no line comments can still be generated. The
+default SHALL be a line-comment form.
+
+#### Scenario: Block-comment markers
+
+- **WHEN** a device declares block-comment markers
+- **THEN** its templates are matched on those markers and generation succeeds
 
 ### Requirement: Devices are discovered from several roots
 
-Devices SHALL be discovered from the packaged set, from a conventional directory
-in the working project, and from an environment-configured search path. A device
-found in a later root SHALL shadow an earlier one with the same identifier, so a
-project can override a packaged device without editing it.
+Devices SHALL be discovered from a conventional directory in the working
+project and from an environment-configured search path. A device found in a
+later root SHALL shadow an earlier one with the same identity. A folder with
+no device module SHALL be skipped without error, so a devices directory may
+also hold shared headers.
 
-#### Scenario: Project device shadows a packaged one
+#### Scenario: Shared directory overrides a project device
 
-- **WHEN** a project directory contains a device whose identifier matches a
-  packaged device
-- **THEN** generation uses the project's device
+- **WHEN** a device on the configured search path has the same identity as one
+  in the project directory
+- **THEN** generation uses the one from the search path
 
-### Requirement: A reference device is provided
+#### Scenario: Folder that is not a device
 
-The system SHALL ship a documented reference device demonstrating multi-file
-output, multiple anchors and the template context, usable as the starting point
-for a real device.
+- **WHEN** a devices directory contains a folder with no device module
+- **THEN** it is ignored and the other devices still load
 
-#### Scenario: Reference device generates compilable code
+### Requirement: Worked examples are provided
 
-- **WHEN** a plan is generated with the reference device and compiled together
-  with the reference runtime it provides
+The project SHALL ship at least one minimal device producing a single
+self-contained file, and one producing a header and source pair, usable as the
+starting point for a real device.
+
+#### Scenario: Example output compiles
+
+- **WHEN** a plan is generated with an example device and compiled
 - **THEN** the code compiles without warnings under a strict warning
   configuration
 - **AND** running it reports failures for steps that are still unimplemented,

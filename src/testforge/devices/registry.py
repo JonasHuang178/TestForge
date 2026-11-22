@@ -1,89 +1,34 @@
 """Discovery and lookup of devices.
 
-The registry is built once at startup. Any manifest problem raises there, so a
-running service is guaranteed to hold only valid devices.
+The registry is built once at startup and every device is imported and checked
+there, so a running service holds only devices that load.
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from jinja2 import Environment
+from testforge.core.errors import DeviceNotFoundError
+from testforge.devices.python_device import DEVICE_MODULE, PythonDevice, load_python_device
 
-from testforge.core.errors import DeviceNotFoundError, ManifestError
-from testforge.core.templating import make_environment
-from testforge.devices.manifest import (
-    MANIFEST_FILENAME,
-    TEMPLATE_DIRNAME,
-    DeviceManifest,
-    load_manifest,
-)
-from testforge.devices.python_device import (
-    DEVICE_MODULE,
-    PythonDevice,
-    load_python_device,
-)
+#: Where a project keeps its devices, relative to the working directory.
+LOCAL_DIRNAME = "devices"
 
-#: Devices shipped with the package.
-BUILTIN_ROOT = Path(__file__).parent / "builtin"
-
-#: Colon-separated extra roots, e.g. TESTFORGE_DEVICE_PATH=/srv/devices
+#: Extra roots, separated by the platform's path separator
+#: (``:`` on Unix, ``;`` on Windows).
 DEVICE_PATH_ENV = "TESTFORGE_DEVICE_PATH"
-
-
-@dataclass(frozen=True)
-class LoadedDevice:
-    """A device the registry holds.
-
-    Exactly one of ``manifest`` or ``python`` is set. Both kinds answer the
-    same questions — identity, plan conventions, how to build a case — so the
-    service never branches on which one it has beyond asking for the outputs.
-    """
-
-    directory: Path
-    manifest: DeviceManifest | None = None
-    environment: Environment | None = None
-    python: PythonDevice | None = None
-
-    @property
-    def id(self) -> str:
-        return self.manifest.id if self.manifest else self.python.id
-
-    @property
-    def name(self) -> str:
-        return self.manifest.name if self.manifest else self.python.name
-
-    @property
-    def description(self) -> str:
-        return self.manifest.description if self.manifest else self.python.description
-
-    @property
-    def version(self) -> int:
-        return self.manifest.version if self.manifest else self.python.version
-
-    @property
-    def parse_options(self):
-        return self.manifest.parse if self.manifest else self.python.parse_options
-
-    @property
-    def kind(self) -> str:
-        return "manifest" if self.manifest else "python"
 
 
 def default_roots(cwd: Path | None = None) -> list[Path]:
     """Where to look for devices when the caller does not say.
 
-    Order is builtin, then ``./devices`` of the working directory, then
-    ``TESTFORGE_DEVICE_PATH``. Later roots win on an id clash, so a project can
-    shadow a builtin device with its own.
+    ``./devices`` first, then anything on ``TESTFORGE_DEVICE_PATH``. A later
+    root wins on an id clash, so a shared device directory can override a
+    project's own.
     """
-    roots = [BUILTIN_ROOT]
-    local = (cwd or Path.cwd()) / "devices"
-    if local.is_dir():
-        roots.append(local)
+    roots = [(cwd or Path.cwd()) / LOCAL_DIRNAME]
     for entry in os.environ.get(DEVICE_PATH_ENV, "").split(os.pathsep):
         if entry.strip():
             roots.append(Path(entry.strip()))
@@ -91,41 +36,26 @@ def default_roots(cwd: Path | None = None) -> list[Path]:
 
 
 class DeviceRegistry:
-    def __init__(self, devices: dict[str, LoadedDevice]) -> None:
+    def __init__(self, devices: dict[str, PythonDevice]) -> None:
         self._devices = devices
 
     @classmethod
     def from_roots(cls, roots: Iterable[Path] | None = None) -> DeviceRegistry:
-        devices: dict[str, LoadedDevice] = {}
+        devices: dict[str, PythonDevice] = {}
         for root in roots if roots is not None else default_roots():
             root = Path(root)
             if not root.is_dir():
                 continue
             for directory in sorted(p for p in root.iterdir() if p.is_dir()):
-                # A folder with device.py writes its rules in Python; one with
-                # manifest.yaml declares them. A folder with neither is not a
-                # device and is skipped silently.
-                if (directory / DEVICE_MODULE).is_file():
-                    device = load_python_device(directory)
-                    devices[device.id] = LoadedDevice(directory=directory, python=device)
+                # A folder without device.py is not a device and is skipped in
+                # silence: a devices directory may hold shared headers too.
+                if not (directory / DEVICE_MODULE).is_file():
                     continue
-                if not (directory / MANIFEST_FILENAME).is_file():
-                    continue
-                manifest = load_manifest(directory)
-                template_root = directory / TEMPLATE_DIRNAME
-                if not template_root.is_dir():
-                    raise ManifestError(
-                        f"Device {manifest.id!r} has no {TEMPLATE_DIRNAME}/ directory",
-                        details={"path": str(directory)},
-                    )
-                devices[manifest.id] = LoadedDevice(
-                    manifest=manifest,
-                    directory=directory,
-                    environment=make_environment(template_root),
-                )
+                device = load_python_device(directory)
+                devices[device.id] = device
         return cls(devices)
 
-    def get(self, device_id: str) -> LoadedDevice:
+    def get(self, device_id: str) -> PythonDevice:
         try:
             return self._devices[device_id]
         except KeyError:
@@ -135,7 +65,7 @@ class DeviceRegistry:
                 details={"device_id": device_id, "known": sorted(self._devices)},
             ) from None
 
-    def list(self) -> list[LoadedDevice]:
+    def list(self) -> list[PythonDevice]:
         return [self._devices[k] for k in sorted(self._devices)]
 
     def __len__(self) -> int:

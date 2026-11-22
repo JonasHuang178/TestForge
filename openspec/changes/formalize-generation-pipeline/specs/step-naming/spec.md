@@ -2,101 +2,78 @@
 
 ## Purpose
 
-Defines how a human-written step title becomes a C++ identifier. Generated names
-appear in committed code and in test reports, so they must be legal, unique and
-stable enough that editing a plan's prose does not churn the generated diff.
+Defines how a human-written step title becomes an identifier in generated
+code, and the helpers a device uses to do it. Generated names appear in
+committed code and in test reports, so they must be legal and stable enough
+that editing a plan's prose does not churn the diff.
 
 ## ADDED Requirements
 
-### Requirement: Index-prefixed naming by default
+### Requirement: The naming rule belongs to the device
 
-The default step function name SHALL include the step's position before its
-title, so that a name survives retitling, preserves plan order in the generated
-file, and is unique without needing a deduplication suffix.
+Each device SHALL decide its own step function names. The framework SHALL call
+the device's rule once per step and make the result available wherever that
+step is rendered, so a module never derives the same name twice.
 
-#### Scenario: Default pattern applied
+#### Scenario: Device controls the name
 
-- **WHEN** a case's first two steps are titled `Power on the device` and
-  `Read firmware version`
-- **THEN** the generated names are `TestStep_01_PowerOnTheDevice` and
-  `TestStep_02_ReadFirmwareVersion`
+- **WHEN** a device's rule produces a name for a step
+- **THEN** that exact name appears in the generated declaration, call and
+  definition for that step
 
-### Requirement: Naming pattern is configurable
+#### Scenario: Rule is called with the step's own data
 
-A device SHALL declare its step naming pattern, and a request SHALL be able to
-override it. The pattern exposes step-level and case-level placeholders.
+- **WHEN** the rule is invoked
+- **THEN** it receives the step's position, title, declared number, body,
+  expectation and source line
 
-#### Scenario: Request overrides the device pattern
+### Requirement: Helpers produce legal identifiers
 
-- **WHEN** a generation requests the pattern `{case_pascal}_{snake_title}`
-- **THEN** names follow that pattern instead of the device's default
-
-### Requirement: Unknown placeholders are rejected
-
-A naming pattern referencing a placeholder the system does not provide SHALL be
-rejected with an error identifying the offending placeholder and listing the
-valid ones. A device manifest's pattern SHALL be validated when the device is
-loaded, not when it is first used.
-
-#### Scenario: Typo in a request pattern
-
-- **WHEN** a generation requests the pattern `Step_{bogus}`
-- **THEN** the request is rejected as invalid
-- **AND** the error names `bogus` and lists the available placeholders
-
-#### Scenario: Typo in a device manifest
-
-- **WHEN** a manifest declares a pattern with an unknown placeholder
-- **THEN** loading that device fails
-
-### Requirement: Generated names are legal C++ identifiers
-
-Every generated name SHALL be a legal identifier that does not collide with a
-reserved word. Characters illegal in an identifier SHALL be removed, a leading
-digit SHALL be made legal, and a reserved word SHALL be escaped.
+The framework SHALL provide the conversions a device needs — identifier
+casing, string-literal escaping, comment rendering and include-guard
+derivation — so each device does not re-implement them. The identifier helper
+SHALL produce a legal, non-reserved identifier.
 
 #### Scenario: Reserved word
 
-- **WHEN** a pattern would produce the identifier `class`
-- **THEN** the emitted identifier is `class_`
+- **WHEN** a name would be a reserved word
+- **THEN** the helper returns an escaped form instead
 
 #### Scenario: Leading digit
 
-- **WHEN** a pattern would produce the identifier `2nd`
-- **THEN** the emitted identifier is `_2nd`
+- **WHEN** a name would begin with a digit
+- **THEN** the helper returns a form that is legal to declare
 
-### Requirement: Non-ASCII titles
+#### Scenario: Acronyms survive casing
 
-Accented Latin characters SHALL be folded to their ASCII equivalents. A title
-with no usable ASCII characters SHALL fall back to a positional name and report a
-diagnostic, so that the file still compiles and the author learns why the name is
-unhelpful.
+- **WHEN** a title contains an all-capital word
+- **THEN** the casing helper keeps it capitalised rather than title-casing it
 
-#### Scenario: Accents are folded
+#### Scenario: Accents fold to ASCII
 
-- **WHEN** a step is titled `Prüfung läuft`
-- **THEN** the title contributes `PrufungLauft` to the identifier
+- **WHEN** a title contains accented Latin characters
+- **THEN** the casing helper yields their unaccented ASCII equivalents
 
-#### Scenario: Title with no ASCII equivalent
+### Requirement: Index-prefixed naming is the recommended default
 
-- **WHEN** a step at position 1 is titled `初始化裝置`
-- **THEN** the identifier falls back to the positional form `TestStep_01_Step1`
-- **AND** a `naming.title_not_representable` warning is reported
+The example devices SHALL name steps with their position before the title, so
+a name survives a retitle, keeps the plan's order in the generated file, and
+is unique without a deduplication suffix.
 
-### Requirement: Names are unique within a case
+#### Scenario: Default naming in the examples
 
-Two steps of the same case SHALL NOT produce the same identifier. A collision
-SHALL be resolved with a numeric suffix and reported, so the author can decide
-whether the duplicate titles were intentional. Identical titles in different
-cases SHALL be free to repeat.
+- **WHEN** an example device generates a case whose first step is titled
+  "Power on the board"
+- **THEN** the generated function name contains both the position 1 and the
+  title, in that order
 
-#### Scenario: Duplicate titles collide under a title-only pattern
+### Requirement: A rule that produces nothing usable is an error
 
-- **WHEN** a case has two steps titled `Reset` and the pattern omits the index
-- **THEN** the identifiers are `Step_Reset` and `Step_Reset_2`
-- **AND** a `naming.duplicate` warning is reported for the second
+Generation SHALL fail, naming the device and the step, when a device's naming
+rule returns an empty value. The system SHALL NOT substitute a name of its own
+and carry on.
 
-#### Scenario: Same title in a different case
+#### Scenario: Empty name
 
-- **WHEN** two different cases each contain a step titled `Reset`
-- **THEN** both may produce the same identifier without a diagnostic
+- **WHEN** a device's rule returns an empty string for a step
+- **THEN** generation fails with an error identifying that step

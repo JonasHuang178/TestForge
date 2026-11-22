@@ -1,3 +1,0 @@
-{% for step in steps %}
-TESTFORGE_RUN_STEP(ctx, {{ step.index }}, "{{ step.title | cpp_string }}", {{ step.function_name }});
-{% endfor %}

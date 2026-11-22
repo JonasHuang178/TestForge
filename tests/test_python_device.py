@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from testforge.core.errors import ManifestError, TemplateRenderError
+from testforge.core.errors import DeviceDefinitionError, TemplateRenderError
 from testforge.core.models import ExistingFile
 from testforge.devices.python_device import load_python_device
 from testforge.devices.registry import DeviceRegistry
@@ -49,7 +49,6 @@ def demo_service() -> GenerationService:
 
 def test_demo_board_loads_from_a_python_module(demo_service: GenerationService) -> None:
     device = demo_service.registry.get("demo_board")
-    assert device.kind == "python"
     assert device.name == "Demo Board"
     assert device.parse_options.step_heading_level == 2
 
@@ -143,7 +142,7 @@ TEMPLATE = "// === TESTFORGE:BODY:BEGIN ===\n// === TESTFORGE:BODY:END ===\n"
 
 def test_module_missing_a_required_name_fails_to_load(tmp_path: Path) -> None:
     directory = _write_device(tmp_path, "d1", 'ID = "d1"\nNAME = "D1"\n')
-    with pytest.raises(ManifestError, match="step_function_name"):
+    with pytest.raises(DeviceDefinitionError, match="step_function_name"):
         load_python_device(directory)
 
 
@@ -151,13 +150,13 @@ def test_module_id_must_match_its_folder(tmp_path: Path) -> None:
     directory = _write_device(
         tmp_path, "wrong", MINIMAL.format(id="d1"), {"t.cpp": TEMPLATE}
     )
-    with pytest.raises(ManifestError, match="folder is named"):
+    with pytest.raises(DeviceDefinitionError, match="folder is named"):
         load_python_device(directory)
 
 
 def test_module_that_raises_on_import_fails_to_load(tmp_path: Path) -> None:
     directory = _write_device(tmp_path, "d1", 'raise RuntimeError("boom")\n')
-    with pytest.raises(ManifestError, match="RuntimeError"):
+    with pytest.raises(DeviceDefinitionError, match="RuntimeError"):
         load_python_device(directory)
 
 

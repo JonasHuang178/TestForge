@@ -25,10 +25,10 @@ class DeviceNotFoundError(TestForgeError):
     code = "device_not_found"
 
 
-class ManifestError(TestForgeError):
-    """A device manifest is malformed or references missing templates."""
+class DeviceDefinitionError(TestForgeError):
+    """A device's module is missing, malformed, or breaks its contract."""
 
-    code = "manifest_invalid"
+    code = "device_invalid"
 
 
 class TemplateRenderError(TestForgeError):

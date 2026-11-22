@@ -13,7 +13,6 @@ const els = {
   device: $("#device"),
   caseSel: $("#case"),
   stepLevel: $("#step-level"),
-  naming: $("#naming"),
   preview: $("#preview"),
   previewStatus: $("#preview-status"),
   editorStatus: $("#editor-status"),
@@ -33,7 +32,6 @@ function currentForm() {
   data.set("device_id", els.device.value || "");
   if (els.caseSel.value) data.set("case_selector", els.caseSel.value);
   if (els.stepLevel.value) data.set("step_level", els.stepLevel.value);
-  if (els.naming.value.trim()) data.set("naming_pattern", els.naming.value.trim());
   return data;
 }
 
@@ -41,8 +39,7 @@ function describeDevice() {
   const opt = els.device.selectedOptions[0];
   if (!opt) return;
   els.deviceHint.textContent =
-    `預設步驟層級 H${opt.dataset.stepLevel}　命名規則 ${opt.dataset.naming}　` +
-    `輸出 ${opt.dataset.outputs}`;
+    `步驟標題層級 H${opt.dataset.stepLevel}　規則檔 ${opt.dataset.rules}`;
 }
 
 // ------------------------------------------------------------- live preview
@@ -148,7 +145,6 @@ function submitDownload(what, path) {
   f.device_id.value = els.device.value || "";
   f.case_selector.value = els.caseSel.value || "";
   f.step_level.value = els.stepLevel.value || "";
-  f.naming_pattern.value = els.naming.value.trim();
   f.what.value = what;
   f.path.value = path || "";
   f.submit();

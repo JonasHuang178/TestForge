@@ -23,7 +23,7 @@ PLAN = (
 def test_devices_lists_the_builtin() -> None:
     result = CliRunner().invoke(main, ["devices"])
     assert result.exit_code == 0
-    assert "example_device" in result.output
+    assert "demo_board" in result.output
 
 
 def test_parse_reports_cases_and_steps(tmp_path: Path) -> None:
@@ -39,7 +39,7 @@ def test_generate_writes_then_regenerates_in_place(tmp_path: Path) -> None:
     plan = tmp_path / "plan.md"
     plan.write_text(PLAN, encoding="utf-8")
     out = tmp_path / "out"
-    args = ["generate", str(plan), "--device", "example_device", "-o", str(out)]
+    args = ["generate", str(plan), "--device", "demo_board", "-o", str(out)]
 
     first = CliRunner().invoke(main, args)
     assert first.exit_code == 0
@@ -49,8 +49,8 @@ def test_generate_writes_then_regenerates_in_place(tmp_path: Path) -> None:
 
     # A hand-written line outside the anchors must survive the next run.
     edited = _read_verbatim(cpp).replace(
-        "namespace example_device {",
-        "namespace example_device {\n\nstatic int g_hand_written = 1;",
+        "namespace demo_board {",
+        "namespace demo_board {\n\nstatic int g_hand_written = 1;",
     )
     _write_verbatim(cpp, edited)
 

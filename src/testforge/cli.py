@@ -66,16 +66,10 @@ def list_devices() -> None:
     """List the devices TestForge can generate for."""
     for device in _service().registry.list():
         click.echo(f"{device.id}  (v{device.version})  {device.name}")
-        if device.manifest is not None:
-            click.echo(f"    rules:   manifest.yaml")
-            click.echo(f"    naming:  {device.manifest.naming.step_function}")
-            click.echo(f"    outputs: {', '.join(o.path for o in device.manifest.outputs)}")
-        else:
-            # A Python device decides its names and filenames inside build(),
-            # so there is no static pattern to print.
-            click.echo(f"    rules:   device.py")
-            click.echo(f"    steps:   H{device.parse_options.step_heading_level} headings")
-        click.echo(f"    path:    {device.directory}")
+        if device.description:
+            click.echo(f"    {device.description}")
+        click.echo(f"    steps:  H{device.parse_options.step_heading_level} headings")
+        click.echo(f"    path:   {device.directory}")
 
 
 @main.command("parse")
@@ -118,17 +112,15 @@ def parse_plan(plan: Path, device_id: str | None, step_level: int | None, as_jso
     "anything outside the anchors is kept.",
 )
 @click.option("--case", "case_selector", type=click.IntRange(min=1), default=None, help="Only this case.")
-@click.option("--naming", default=None, help="Override the step function pattern.")
 def generate(
     plan: Path,
     device_id: str,
     out: Path | None,
     case_selector: int | None,
-    naming: str | None,
 ) -> None:
     """Generate code from PLAN. Without -o, the artifacts go to stdout."""
     service = _service()
-    options = GenerateOptions(case_selector=case_selector, naming_pattern=naming)
+    options = GenerateOptions(case_selector=case_selector)
 
     existing = []
     if out is not None and out.is_dir():

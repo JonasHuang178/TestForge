@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
-from testforge.core.errors import ManifestError, TemplateRenderError
+from testforge.core.assembler import DEFAULT_ANCHOR_STYLE, AnchorStyle
+from testforge.core.errors import DeviceDefinitionError, TemplateRenderError
 from testforge.core.options import ParseOptions
 from testforge.device_api import CaseInfo, OutputFile, StepInfo
 from testforge.core.models import TestCase
@@ -55,6 +56,12 @@ class PythonDevice:
         self.parse_options = ParseOptions(
             case_heading_level=int(getattr(module, "CASE_HEADING_LEVEL", 1)),
             step_heading_level=int(getattr(module, "STEP_HEADING_LEVEL", 2)),
+        )
+        # A device emitting C89, where // is not a comment, can declare a
+        # block-comment marker instead.
+        self.anchor_style = AnchorStyle(
+            begin=getattr(module, "ANCHOR_BEGIN", DEFAULT_ANCHOR_STYLE.begin),
+            end=getattr(module, "ANCHOR_END", DEFAULT_ANCHOR_STYLE.end),
         )
 
     @property
@@ -187,7 +194,7 @@ def load_python_device(directory: Path) -> PythonDevice:
 
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
-        raise ManifestError(
+        raise DeviceDefinitionError(
             f"Cannot load {path} as a Python module.", details={"path": str(path)}
         )
     module = importlib.util.module_from_spec(spec)
@@ -198,26 +205,26 @@ def load_python_device(directory: Path) -> PythonDevice:
         spec.loader.exec_module(module)
     except Exception as exc:
         sys.modules.pop(module_name, None)
-        raise ManifestError(
+        raise DeviceDefinitionError(
             f"{path} raised {type(exc).__name__} while being imported: {exc}",
             details={"path": str(path)},
         ) from exc
 
     missing = [attr for attr in _REQUIRED if not hasattr(module, attr)]
     if missing:
-        raise ManifestError(
+        raise DeviceDefinitionError(
             f"{path} does not define {', '.join(missing)}. A device module must "
             f"define ID, NAME, step_function_name(step) and build(case).",
             details={"path": str(path), "missing": missing},
         )
     for attr in ("step_function_name", "build"):
         if not callable(getattr(module, attr)):
-            raise ManifestError(
+            raise DeviceDefinitionError(
                 f"{path}: {attr} must be a function.",
                 details={"path": str(path)},
             )
     if module.ID != directory.name:
-        raise ManifestError(
+        raise DeviceDefinitionError(
             f"{path}: ID is {module.ID!r} but the folder is named "
             f"{directory.name!r}; keep them identical so devices stay findable.",
             details={"path": str(path)},

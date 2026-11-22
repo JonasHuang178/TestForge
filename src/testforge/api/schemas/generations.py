@@ -11,12 +11,6 @@ from testforge.api.schemas.parse import ParseOptionsIn
 class GenerateOptionsIn(ParseOptionsIn):
     model_config = ConfigDict(extra="forbid")
 
-    naming_pattern: str | None = Field(
-        default=None,
-        description="Overrides the device's step function pattern. Placeholders: "
-        "index, declared_index, pascal_title, snake_title, camel_title, "
-        "upper_title, case_index, case_pascal, case_snake, case_id, device_id.",
-    )
     case_selector: int | None = Field(
         default=None, ge=1, description="Generate only this 1-based case"
     )

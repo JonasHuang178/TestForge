@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import pytest
 
-from testforge.core.assembler import detect_newline, find_anchor_regions, inject
+from testforge.core.assembler import (
+    AnchorStyle,
+    detect_newline,
+    find_anchor_regions,
+    inject,
+)
 from testforge.core.errors import (
     AnchorDuplicateError,
     AnchorMissingError,
     AnchorUnbalancedError,
 )
-from testforge.devices.manifest import AnchorStyle
 
 STYLE = AnchorStyle()
 

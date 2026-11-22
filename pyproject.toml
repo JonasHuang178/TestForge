@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.6",
     "markdown-it-py>=3.0",
-    "Jinja2>=3.1",
+    "Jinja2>=3.1",          # HTML templates for the web page
     "PyYAML>=6.0",
     "fastapi>=0.110",
     "uvicorn>=0.27",
@@ -27,7 +27,8 @@ testforge = "testforge.cli:_run"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"testforge.devices" = ["builtin/**/*.yaml", "builtin/**/*.j2", "builtin/**/*.h"]
+# Devices are not shipped with the package: they live in the project's own
+# ./devices directory, or wherever TESTFORGE_DEVICE_PATH points.
 "testforge.web" = ["templates/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]

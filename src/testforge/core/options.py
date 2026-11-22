@@ -9,7 +9,7 @@ class ParseOptions(BaseModel):
     """How to read a test plan.
 
     Defaults match the canonical format documented in ``examples/``; a device
-    manifest may override them so a team can keep its existing plan layout.
+    device may override them so a team can keep its existing plan layout.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -28,10 +28,6 @@ class ParseOptions(BaseModel):
 class GenerateOptions(ParseOptions):
     """Parse options plus the generation-time overrides."""
 
-    naming_pattern: str | None = Field(
-        default=None,
-        description="Overrides the device manifest's step function pattern.",
-    )
     case_selector: int | None = Field(
         default=None,
         ge=1,

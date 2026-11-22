@@ -63,16 +63,7 @@ def index(request: Request, service: GenerationService = Depends(get_service)):
             "name": d.name,
             "description": d.description,
             "step_heading_level": d.parse_options.step_heading_level,
-            # A Python device computes names and filenames per case, so the
-            # hint shows how its rules are written instead of a fixed pattern.
-            "naming": (
-                d.manifest.naming.step_function if d.manifest else "由 device.py 決定"
-            ),
-            "outputs": (
-                ", ".join(o.path for o in d.manifest.outputs)
-                if d.manifest
-                else "由 device.py 決定"
-            ),
+            "rules": str(d.directory / "device.py"),
         }
         for d in service.registry.list()
     ]
@@ -125,7 +116,6 @@ def generate(
     device_id: str = Form(...),
     case_selector: int | None = Form(default=None),
     step_level: int | None = Form(default=None),
-    naming_pattern: str = Form(default=""),
     service: GenerationService = Depends(get_service),
 ):
     """Generate and render the artifacts as tabs."""
@@ -135,7 +125,6 @@ def generate(
             device_id,
             GenerateOptions(
                 case_selector=case_selector,
-                naming_pattern=naming_pattern or None,
                 **({"step_heading_level": step_level} if step_level else {}),
             ),
         )
@@ -162,7 +151,6 @@ def download(
     device_id: str = Form(...),
     case_selector: int | None = Form(default=None),
     step_level: int | None = Form(default=None),
-    naming_pattern: str = Form(default=""),
     what: Literal["zip", "file"] = Form(default="zip"),
     path: str = Form(default=""),
     service: GenerationService = Depends(get_service),
@@ -178,7 +166,6 @@ def download(
         device_id,
         GenerateOptions(
             case_selector=case_selector,
-            naming_pattern=naming_pattern or None,
             **({"step_heading_level": step_level} if step_level else {}),
         ),
     )

@@ -1,6 +1,6 @@
 """Application factory.
 
-Devices are loaded once in the lifespan and a broken manifest raises there, so
+Devices are loaded once in the lifespan and a broken device raises there, so
 a process that starts is a process whose devices are all valid.
 """
 

@@ -16,9 +16,34 @@ from testforge.core.errors import (
     AnchorMissingError,
     AnchorUnbalancedError,
 )
-from testforge.devices.manifest import AnchorStyle
 
 _INDENT_RE = re.compile(r"^[ \t]*")
+
+
+@dataclass(frozen=True)
+class AnchorStyle:
+    """How a device spells its begin and end markers.
+
+    Both must contain ``{name}``. A device that generates C89, where ``//`` is
+    not a comment, can declare a block-comment form instead.
+    """
+
+    begin: str = "// === TESTFORGE:{name}:BEGIN ==="
+    end: str = "// === TESTFORGE:{name}:END ==="
+
+    def __post_init__(self) -> None:
+        for field_name, value in (("begin", self.begin), ("end", self.end)):
+            if "{name}" not in value:
+                raise ValueError(f"anchor {field_name} marker must contain {{name}}")
+
+    def begin_marker(self, name: str) -> str:
+        return self.begin.format(name=name)
+
+    def end_marker(self, name: str) -> str:
+        return self.end.format(name=name)
+
+
+DEFAULT_ANCHOR_STYLE = AnchorStyle()
 
 
 def detect_newline(content: str) -> str:
@@ -96,7 +121,9 @@ def find_anchor_regions(
 
 
 def inject(
-    content: str, fragments: dict[str, str], style: AnchorStyle
+    content: str,
+    fragments: dict[str, str],
+    style: AnchorStyle = DEFAULT_ANCHOR_STYLE,
 ) -> tuple[str, tuple[str, ...]]:
     """Replace the body of each anchor in ``content`` with its fragment.
 
