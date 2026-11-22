@@ -21,6 +21,11 @@ from testforge.devices.manifest import (
     DeviceManifest,
     load_manifest,
 )
+from testforge.devices.python_device import (
+    DEVICE_MODULE,
+    PythonDevice,
+    load_python_device,
+)
 
 #: Devices shipped with the package.
 BUILTIN_ROOT = Path(__file__).parent / "builtin"
@@ -31,13 +36,41 @@ DEVICE_PATH_ENV = "TESTFORGE_DEVICE_PATH"
 
 @dataclass(frozen=True)
 class LoadedDevice:
-    manifest: DeviceManifest
+    """A device the registry holds.
+
+    Exactly one of ``manifest`` or ``python`` is set. Both kinds answer the
+    same questions — identity, plan conventions, how to build a case — so the
+    service never branches on which one it has beyond asking for the outputs.
+    """
+
     directory: Path
-    environment: Environment
+    manifest: DeviceManifest | None = None
+    environment: Environment | None = None
+    python: PythonDevice | None = None
 
     @property
     def id(self) -> str:
-        return self.manifest.id
+        return self.manifest.id if self.manifest else self.python.id
+
+    @property
+    def name(self) -> str:
+        return self.manifest.name if self.manifest else self.python.name
+
+    @property
+    def description(self) -> str:
+        return self.manifest.description if self.manifest else self.python.description
+
+    @property
+    def version(self) -> int:
+        return self.manifest.version if self.manifest else self.python.version
+
+    @property
+    def parse_options(self):
+        return self.manifest.parse if self.manifest else self.python.parse_options
+
+    @property
+    def kind(self) -> str:
+        return "manifest" if self.manifest else "python"
 
 
 def default_roots(cwd: Path | None = None) -> list[Path]:
@@ -69,6 +102,13 @@ class DeviceRegistry:
             if not root.is_dir():
                 continue
             for directory in sorted(p for p in root.iterdir() if p.is_dir()):
+                # A folder with device.py writes its rules in Python; one with
+                # manifest.yaml declares them. A folder with neither is not a
+                # device and is skipped silently.
+                if (directory / DEVICE_MODULE).is_file():
+                    device = load_python_device(directory)
+                    devices[device.id] = LoadedDevice(directory=directory, python=device)
+                    continue
                 if not (directory / MANIFEST_FILENAME).is_file():
                     continue
                 manifest = load_manifest(directory)

@@ -106,23 +106,40 @@ def generate_response(result: GenerationResult) -> GenerateResponse:
 
 
 def device_summary(device: LoadedDevice) -> DeviceSummary:
-    m = device.manifest
-    return DeviceSummary(id=m.id, name=m.name, description=m.description, version=m.version)
+    return DeviceSummary(
+        id=device.id,
+        name=device.name,
+        description=device.description,
+        version=device.version,
+        kind=device.kind,
+    )
 
 
 def device_detail(device: LoadedDevice) -> DeviceDetail:
-    m = device.manifest
+    """Describe a device of either kind.
+
+    A Python device decides its filenames and function names inside build(),
+    so it has no static naming pattern and no output list to publish; those
+    fields come back null and empty rather than being invented.
+    """
+    from testforge.service import PYTHON_DEVICE_ANCHOR
+
+    anchor = device.manifest.anchor if device.manifest else PYTHON_DEVICE_ANCHOR
     return DeviceDetail(
-        id=m.id,
-        name=m.name,
-        description=m.description,
-        version=m.version,
-        step_function_pattern=m.naming.step_function,
-        case_heading_level=m.parse.case_heading_level,
-        step_heading_level=m.parse.step_heading_level,
-        anchor=AnchorStyleOut(begin=m.anchor.begin, end=m.anchor.end),
+        id=device.id,
+        name=device.name,
+        description=device.description,
+        version=device.version,
+        kind=device.kind,
+        step_function_pattern=(
+            device.manifest.naming.step_function if device.manifest else None
+        ),
+        case_heading_level=device.parse_options.case_heading_level,
+        step_heading_level=device.parse_options.step_heading_level,
+        anchor=AnchorStyleOut(begin=anchor.begin, end=anchor.end),
         outputs=[
-            OutputSpecOut(path=o.path, anchors=list(o.fragments)) for o in m.outputs
+            OutputSpecOut(path=o.path, anchors=list(o.fragments))
+            for o in (device.manifest.outputs if device.manifest else [])
         ],
     )
 

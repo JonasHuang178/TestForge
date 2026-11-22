@@ -65,10 +65,16 @@ def main() -> None:
 def list_devices() -> None:
     """List the devices TestForge can generate for."""
     for device in _service().registry.list():
-        m = device.manifest
-        click.echo(f"{m.id}  (v{m.version})  {m.name}")
-        click.echo(f"    naming:  {m.naming.step_function}")
-        click.echo(f"    outputs: {', '.join(o.path for o in m.outputs)}")
+        click.echo(f"{device.id}  (v{device.version})  {device.name}")
+        if device.manifest is not None:
+            click.echo(f"    rules:   manifest.yaml")
+            click.echo(f"    naming:  {device.manifest.naming.step_function}")
+            click.echo(f"    outputs: {', '.join(o.path for o in device.manifest.outputs)}")
+        else:
+            # A Python device decides its names and filenames inside build(),
+            # so there is no static pattern to print.
+            click.echo(f"    rules:   device.py")
+            click.echo(f"    steps:   H{device.parse_options.step_heading_level} headings")
         click.echo(f"    path:    {device.directory}")
 
 

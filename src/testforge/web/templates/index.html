@@ -21,7 +21,7 @@
       <select id="device" name="device_id">
         {% for d in devices %}
         <option value="{{ d.id }}" data-step-level="{{ d.step_heading_level }}"
-                data-naming="{{ d.naming }}" data-outputs="{{ d.outputs | join(', ') }}">
+                data-naming="{{ d.naming }}" data-outputs="{{ d.outputs }}">
           {{ d.name }}
         </option>
         {% endfor %}

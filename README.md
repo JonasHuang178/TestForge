@@ -77,7 +77,9 @@ src/testforge/
     naming.py        步驟標題 -> C++ 識別碼
     assembler.py     基於 anchor 的程式碼注入
     templating.py    Jinja2 環境與 filter
+  device_api.py      device.py 會 import 的公開介面
   devices/
+    python_device.py device.py 的載入與契約檢查
     manifest.py      manifest schema，載入時完整驗證
     registry.py      device 探索與查找
     builtin/         隨套件發行的 device
@@ -181,30 +183,79 @@ Drive the enable line high and wait for the regulator to settle.
 
 ## 新增一個 device
 
-複製 `src/testforge/devices/builtin/example_device/` 然後修改即可，不需要改任何 Python。device 也會從 `./devices/` 和 `TESTFORGE_DEVICE_PATH` 載入；後面的搜尋根目錄會覆蓋前面的，所以專案可以用自己的版本蓋掉內建 device。
+一個 device 就是一個資料夾，裡面放**一個 `device.py`** 加上它要填寫的 `.h` / `.cpp`（或 `.c` / `.h`，由你決定）。`device.py` 是**你自己寫的**，每個 device 的產生規則都寫在裡面。
 
 ```
-my_device/
-  manifest.yaml
-  templates/
-    test_case.h.j2       # 骨架，負責攜帶 anchor 標記
-    test_case.cpp.j2
-    step_decls.cpp.j2    # fragment，被渲染進某一個 anchor
-    step_calls.cpp.j2
-    step_defs.cpp.j2
+devices/
+  demo_board/
+    device.py                 # 你寫的規則：命名、輸出哪些檔、填什麼內容
+    test_case.h               # 範本，含 anchor 標記
+    test_case.cpp
+    demo_board_runtime.h      # 參考 runtime，不參與生成
+  my_board/
+    ...
 ```
 
-manifest 宣告 anchor 的寫法、命名規則，以及「哪個 fragment 填進哪個檔案的哪個 anchor」。`example_device/manifest.yaml` 的開頭以註解完整記錄了可用的模板 context。每份 manifest 都在 registry 載入時驗證，所以打錯字會讓服務起不來，而不是等到某個人的第一個請求才失敗。
+把 `devices/demo_board/` 複製一份改名就能開始。資料夾名稱必須和 `device.py` 裡的 `ID` 一致。TestForge 會從套件內建的 device、專案根目錄的 `./devices/`，以及 `TESTFORGE_DEVICE_PATH` 載入；後面的會蓋掉前面同名的。
 
-`example_device/support/testforge_runtime.h` 是一份參考 runtime，不參與生成。它存在的理由是讓產生的程式碼可以直接編譯並執行：
+### device.py 的契約
+
+必須定義四樣東西：
+
+```python
+ID = "my_board"            # 與資料夾同名
+NAME = "My Board"
+
+def step_function_name(step):
+    """一個步驟 -> 一個 C 函式名稱。這就是你的命名規則。"""
+    return identifier(f"TestStep_{step.index:02d}_{pascal(step.title)}")
+
+def build(case):
+    """回傳這個 test case 要產生哪些檔案。"""
+    return [
+        output("test_x.h",   template="test_case.h",   anchors={...}, GUARD="..."),
+        output("test_x.cpp", template="test_case.cpp", anchors={...}),
+    ]
+```
+
+可選的有 `DESCRIPTION`、`VERSION`、`STEP_HEADING_LEVEL`、`CASE_HEADING_LEVEL`。
+
+`output()` 的三個部分：
+
+| 參數 | 意義 |
+|---|---|
+| `path` | 要產生的檔名，由你從 `case` 算出來 |
+| `template` | 同資料夾下的範本檔，**只在輸出檔還不存在時**使用 |
+| `anchors` | anchor 名稱 -> 要放進該區塊的程式碼 |
+| `**variables` | 範本裡的 `@@NAME@@` placeholder，只在建立時替換 |
+
+範本用 `@@NAME@@` 而不是大括號，因為 C/C++ 本來就充滿大括號。
+
+`case` 和 `step` 可用的欄位，以及 `pascal` / `snake` / `cstr` / `comment` / `guard` / `identifier` 這些輔助函式，都定義在 `src/testforge/device_api.py`，有完整 docstring。
+
+### 框架仍然保證的事
+
+不論你的 `device.py` 怎麼寫：
+
+- **只有 anchor 之間的區塊會被重寫** —— 其餘手寫的程式碼永遠保留
+- **檔案原有的換行字元會保留** —— CRLF 不會被改成 LF
+- **相同輸入產生 byte 級相同的輸出**
+- 計畫的解析方式對所有 device 一致
+
+所以你只要負責「產生什麼」，不必處理「怎麼安全地寫回檔案」。
+
+### 試一下
 
 ```bash
-testforge generate examples/sensor_init.md --device example_device --case 1 -o /tmp/tf
-cp src/testforge/devices/builtin/example_device/support/testforge_runtime.h /tmp/tf
-cd /tmp/tf
-# 再補一個 main()，呼叫 example_device::RunSensorInitializationSequence(ctx)
-g++ -std=c++17 -Wall -Wextra -Werror -o runner main.cpp test_*.cpp
+testforge generate examples/demo_board_plan.md --device demo_board -o ./out
+cd out && cp ../devices/demo_board/demo_board_runtime.h .
+# 補一個 main() 呼叫 demo_board::RunLEDBlink(ctx)
+g++ -std=c++17 -Wall -Wextra -Werror -o runner main.cpp test_led_blink.cpp
 ```
+
+### 另一種寫法：manifest.yaml
+
+較早的宣告式 device（`manifest.yaml` + Jinja2 範本）仍然可用，內建的 `example_device` 就是。規則單純時它比較短，但表達力不如 Python。兩種都支援，`testforge devices` 會標示每個 device 是哪一種。
 
 ## 測試
 

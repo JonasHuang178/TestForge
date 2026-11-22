@@ -59,12 +59,20 @@ def index(request: Request, service: GenerationService = Depends(get_service)):
     """The editor page. Everything else on this router returns a fragment."""
     devices = [
         {
-            "id": d.manifest.id,
-            "name": d.manifest.name,
-            "description": d.manifest.description,
-            "step_heading_level": d.manifest.parse.step_heading_level,
-            "naming": d.manifest.naming.step_function,
-            "outputs": [o.path for o in d.manifest.outputs],
+            "id": d.id,
+            "name": d.name,
+            "description": d.description,
+            "step_heading_level": d.parse_options.step_heading_level,
+            # A Python device computes names and filenames per case, so the
+            # hint shows how its rules are written instead of a fixed pattern.
+            "naming": (
+                d.manifest.naming.step_function if d.manifest else "由 device.py 決定"
+            ),
+            "outputs": (
+                ", ".join(o.path for o in d.manifest.outputs)
+                if d.manifest
+                else "由 device.py 決定"
+            ),
         }
         for d in service.registry.list()
     ]
