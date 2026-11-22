@@ -97,7 +97,9 @@
   <input type="hidden" name="path">
 </form>
 
-<template id="example-plan">{{ example }}</template>
+{% for d in devices %}
+<template class="example-plan" data-device="{{ d.id }}">{{ d.example }}</template>
+{% endfor %}
 
 <script src="/static/app.js"></script>
 </body>

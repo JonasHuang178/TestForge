@@ -50,8 +50,8 @@ class ErrorEnvelope(BaseModel):
             "example": {
                 "error": {
                     "code": "device_not_found",
-                    "message": "Unknown device 'foo'. Known devices: example_device",
-                    "details": {"device_id": "foo", "known": ["example_device"]},
+                    "message": "Unknown device 'foo'. Known devices: simple_cpp",
+                    "details": {"device_id": "foo", "known": ["simple_cpp"]},
                 },
                 "diagnostics": [],
             }

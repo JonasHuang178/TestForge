@@ -14,43 +14,48 @@ from click.testing import CliRunner
 from testforge.cli import _read_verbatim, _write_verbatim, main
 
 PLAN = (
-    "# Test Case: Sensor Init\n\n- ID: TC-001\n\n"
-    "## Step 1: Power on\n\nDrive the enable line high.\n\n"
-    "**Expected:** READY within 500 ms.\n"
+    "## Test Case List\n\n"
+    "### print all info\n\n"
+    "- ID: TC-100\n\n"
+    "#### Step 1 Print the build version\n\n"
+    "Call the version helper and write it to stdout.\n\n"
+    "**Expected:** A non-empty version string is printed.\n"
 )
 
 
 def test_devices_lists_the_builtin() -> None:
     result = CliRunner().invoke(main, ["devices"])
     assert result.exit_code == 0
-    assert "demo_board" in result.output
+    assert "simple_cpp" in result.output
 
 
 def test_parse_reports_cases_and_steps(tmp_path: Path) -> None:
     plan = tmp_path / "plan.md"
     plan.write_text(PLAN, encoding="utf-8")
-    result = CliRunner().invoke(main, ["parse", str(plan)])
+    # Without --device the default conventions apply, so the plan has to be
+    # read in the device's own conventions to see its cases.
+    result = CliRunner().invoke(main, ["parse", str(plan), "--device", "simple_cpp"])
     assert result.exit_code == 0
-    assert "Sensor Init" in result.output
-    assert "Power on" in result.output
+    assert "print all info" in result.output
+    assert "Print the build version" in result.output
 
 
 def test_generate_writes_then_regenerates_in_place(tmp_path: Path) -> None:
     plan = tmp_path / "plan.md"
     plan.write_text(PLAN, encoding="utf-8")
     out = tmp_path / "out"
-    args = ["generate", str(plan), "--device", "demo_board", "-o", str(out)]
+    args = ["generate", str(plan), "--device", "simple_cpp", "-o", str(out)]
 
     first = CliRunner().invoke(main, args)
     assert first.exit_code == 0
     assert "created" in first.output
-    cpp = out / "test_sensor_init.cpp"
+    cpp = out / "test_main.cpp"
     assert cpp.is_file()
 
     # A hand-written line outside the anchors must survive the next run.
     edited = _read_verbatim(cpp).replace(
-        "namespace demo_board {",
-        "namespace demo_board {\n\nstatic int g_hand_written = 1;",
+        "#include <iostream>",
+        "#include <iostream>\n\nstatic int g_hand_written = 1;",
     )
     _write_verbatim(cpp, edited)
 

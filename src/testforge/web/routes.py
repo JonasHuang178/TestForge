@@ -64,14 +64,12 @@ def index(request: Request, service: GenerationService = Depends(get_service)):
             "description": d.description,
             "step_heading_level": d.parse_options.step_heading_level,
             "rules": str(d.directory / "device.py"),
+            "example": d.example_plan or "",
         }
         for d in service.registry.list()
     ]
-    example = _example_plan()
     return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={"devices": devices, "example": example},
+        request=request, name="index.html", context={"devices": devices}
     )
 
 
@@ -203,18 +201,4 @@ def _fragment_error(request: Request, exc: TestForgeError, diagnostics=()) -> HT
             "diagnostics": _diagnostic_rows(diagnostics),
         },
         status_code=200,
-    )
-
-
-def _example_plan() -> str:
-    """The bundled sample, so the page is usable without hunting for a file."""
-    candidate = WEB_DIR.parents[2] / "examples" / "sensor_init.md"
-    if candidate.is_file():
-        return candidate.read_text(encoding="utf-8")
-    return (
-        "# Test Case: Sensor Initialization Sequence\n\n"
-        "- ID: TC-001\n\n"
-        "## Step 1: Power on the device\n\n"
-        "Drive the enable line high and wait for the regulator to settle.\n\n"
-        "**Expected:** The READY flag is asserted within 500 ms.\n"
     )

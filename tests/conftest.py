@@ -6,20 +6,32 @@ import pytest
 from fastapi.testclient import TestClient
 
 from testforge.api.app import create_app
+from testforge.core.options import ParseOptions
 from testforge.devices.registry import DeviceRegistry
 from testforge.service import GenerationService
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLES = REPO_ROOT / "examples"
 DEVICES = REPO_ROOT / "devices"
+
+#: The device every test generates with, and the plan it ships.
+DEVICE_ID = "simple_cpp"
+PLAN_PATH = DEVICES / DEVICE_ID / "example_plan.md"
 
 
 @pytest.fixture(scope="session")
 def plan_source() -> str:
-    """A richer plan: two cases, metadata, a fenced block, a step with no
-    expectation. Used wherever the test is about parsing or generation rather
-    than about one device."""
-    return (EXAMPLES / "sensor_init.md").read_text(encoding="utf-8")
+    """The device's own sample: two cases, metadata, a fenced block, a step
+    with no expectation, and sections that must not be read as cases."""
+    return PLAN_PATH.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="session")
+def plan_options() -> ParseOptions:
+    """The conventions that sample is written in, for tests that parse it
+    without going through a device."""
+    return ParseOptions(
+        case_heading_level=3, step_heading_level=4, case_section="Test Case List"
+    )
 
 
 @pytest.fixture

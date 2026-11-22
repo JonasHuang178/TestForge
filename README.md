@@ -47,10 +47,11 @@ $env:PYTHONPATH = "src"; py -m uvicorn testforge.api.app:app  # Windows
 命令列同樣能做完整流程：
 
 ```bash
-testforge devices                                     # 可以為哪些 device 生成
-testforge parse examples/sensor_init.md               # TestForge 讀到了什麼
-testforge generate examples/sensor_init.md \
-    --device example_device --case 1 -o ./out         # 寫出檔案
+testforge devices                                              # 有哪些 device
+testforge parse  devices/simple_cpp/example_plan.md \
+    --device simple_cpp                                        # 讀到了什麼
+testforge generate devices/simple_cpp/example_plan.md \
+    --device simple_cpp -o ./out                               # 寫出檔案
 ```
 
 對同一個 `-o` 目錄再執行一次 `generate` 就是原地重新生成：只有 anchor 標記之間的區塊會被重寫，你在標記外手寫的任何東西都會保留。
@@ -154,7 +155,7 @@ anchor 的問題回 422 而不是 409：它的本質是「你給的這份輸入�
 
 ## 計畫格式
 
-標題層級與 case 所在的區段都由 device 決定，所以你的團隊不必改既有的文件排版。以下是 `simple_cpp` 預期的格式：
+標題層級與 case 所在的區段都由 device 決定，所以你的團隊不必改既有的文件排版。以下是 `simple_cpp` 預期的格式（完整版見 `devices/simple_cpp/example_plan.md`）：
 
 ```markdown
 # Console App Test Plan
@@ -186,7 +187,7 @@ Read the id from EEPROM.
 * 緊接在 case 標題下的 bullet list 是 metadata（`Key: Value`）。
 * 步驟正文保留原始 markdown，包含 fenced code block。fence 裡的 `#` 絕不會被誤認成標題。
 
-`demo_board` 用的是另一組設定（`#` 當 case、`##` 當步驟、不限定區段），示範同一個解析器如何服務不同的文件慣例。
+這些都由 `device.py` 設定，所以另一個 device 可以用完全不同的慣例，共用同一個解析器。
 
 ## 新增一個 device
 
@@ -194,19 +195,17 @@ Read the id from EEPROM.
 
 ```
 devices/
-  simple_cpp/                 # 整份計畫產生一個 .cpp
-    device.py
+  simple_cpp/
+    device.py                 # 你寫的規則：命名、輸出哪些檔、填什麼內容
     main.cpp                  # 你的真實模板，不含任何標記
-  demo_board/                 # 每個 case 產生 header + source
-    device.py
-    test_case.h
-    test_case.cpp
-    demo_board_runtime.h      # 參考 runtime，不參與生成
+    example_plan.md           # 這個 device 的範例計畫
   my_board/
     ...
 ```
 
-從 `devices/simple_cpp/` 開始最容易——它的模板就是一份乾淨的 `main.cpp`，沒有任何 TestForge 標記，`device.py` 自己在正確位置插入。複製一份改名就能開始。資料夾名稱必須和 `device.py` 裡的 `ID` 一致。TestForge 會從套件內建的 device、專案根目錄的 `./devices/`，以及 `TESTFORGE_DEVICE_PATH` 載入；後面的會蓋掉前面同名的。
+複製 `devices/simple_cpp/` 改名就能新增 device，資料夾名稱要和 `device.py` 裡的 `ID` 一致。
+
+範例計畫放在 device 資料夾裡，由 `EXAMPLE_PLAN` 指定。web 頁面的「載入範例」會載入**當前選到的 device** 的那一份——一份為某個 device 寫的計畫，在另一個 device 的標題慣例下會解析不出東西，所以範例必須跟著 device 走。資料夾名稱必須和 `device.py` 裡的 `ID` 一致。TestForge 會從套件內建的 device、專案根目錄的 `./devices/`，以及 `TESTFORGE_DEVICE_PATH` 載入；後面的會蓋掉前面同名的。
 
 ### device.py 的契約
 
@@ -232,7 +231,7 @@ def build_all(cases):
 
 `build` 和 `build_all` **必須且只能定義一個**，載入時會檢查。選錯會壞：若所有 case 共用一個檔案卻用 `build(case)`，每個 case 都會覆寫同一塊 anchor 區域，只有最後一個留下來。
 
-可選的有 `DESCRIPTION`、`VERSION`、`CASE_HEADING_LEVEL`、`STEP_HEADING_LEVEL`、`CASE_SECTION`、`SECTION_HEADING_LEVEL`、`ANCHOR_BEGIN`、`ANCHOR_END`。
+可選的有 `DESCRIPTION`、`VERSION`、`CASE_HEADING_LEVEL`、`STEP_HEADING_LEVEL`、`CASE_SECTION`、`SECTION_HEADING_LEVEL`、`ANCHOR_BEGIN`、`ANCHOR_END`、`EXAMPLE_PLAN`。
 
 `output()` 的三個部分：
 
@@ -286,7 +285,7 @@ int main()
 ### 試一下
 
 ```bash
-testforge generate examples/console_plan.md --device simple_cpp -o ./out
+testforge generate devices/simple_cpp/example_plan.md --device simple_cpp -o ./out
 cd out && g++ -std=c++17 -Wall -Wextra -Werror -o runner test_main.cpp && ./runner
 ```
 

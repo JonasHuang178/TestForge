@@ -23,19 +23,19 @@ UPDATE = os.environ.get("UPDATE_GOLDEN") == "1"
 # importable package under a bare `pytest`.
 TESTS_DIR = Path(__file__).resolve().parent
 GOLDEN = TESTS_DIR / "golden"
-EXAMPLES = TESTS_DIR.parent / "examples"
 DEVICES = TESTS_DIR.parent / "devices"
 
-#: One golden set per device, so a change to either device's rules shows up.
-CASES = [("demo_board", "demo_board_plan.md"), ("simple_cpp", "console_plan.md")]
+#: Each device is generated from the sample plan it ships.
+DEVICE_IDS = ["simple_cpp"]
 
 
 def test_generated_output_matches_golden() -> None:
     service = GenerationService(DeviceRegistry.from_roots([DEVICES]))
 
     artifacts = []
-    for device_id, plan in CASES:
-        source = (EXAMPLES / plan).read_text(encoding="utf-8")
+    for device_id in DEVICE_IDS:
+        source = service.registry.get(device_id).example_plan
+        assert source, f"device {device_id} ships no example plan to snapshot"
         artifacts.extend(service.generate(source, device_id).artifacts)
     expected_names = {a.path for a in artifacts}
 

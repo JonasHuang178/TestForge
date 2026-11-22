@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class ParseOptions(BaseModel):
     """How to read a test plan.
 
-    Defaults match the canonical format documented in ``examples/``; a device
-    device may override them so a team can keep its existing plan layout.
+    Every device may override these, so a team can keep the plan layout it
+    already uses.
     """
 
     model_config = ConfigDict(extra="forbid")

@@ -24,8 +24,8 @@ class ParseRequest(BaseModel):
         extra="forbid",
         json_schema_extra={
             "example": {
-                "source": "# Test Case: Sensor Init\n\n- ID: TC-001\n\n## Step 1: Power on\n\nDrive the enable line high.\n\n**Expected:** READY within 500 ms.\n",
-                "device_id": "example_device",
+                "source": "## Test Case List\n\n### print all info\n\n- ID: TC-100\n\n#### Step 1 Print the build version\n\nCall the version helper.\n\n**Expected:** A non-empty version string is printed.\n",
+                "device_id": "simple_cpp",
             }
         },
     )

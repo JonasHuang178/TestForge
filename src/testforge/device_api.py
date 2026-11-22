@@ -12,7 +12,7 @@ the framework keeps the guarantees that must hold for every device:
 * the same input always produces byte-identical output.
 
 A module must define ``ID``, ``NAME``, ``step_function_name`` and ``build``.
-Everything else has a default. See ``devices/demo_board/device.py`` for a
+Everything else has a default. See ``devices/simple_cpp/device.py`` for a
 worked example.
 """
 

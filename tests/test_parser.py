@@ -15,24 +15,21 @@ def codes(result) -> list[str]:
     return [d.code for d in result.diagnostics]
 
 
-def test_parses_cases_steps_and_metadata(parser, plan_source: str) -> None:
-    result = parser.parse(plan_source)
-    assert [c.title for c in result.cases] == [
-        "Sensor Initialization Sequence",
-        "Sensor Fault Recovery",
-    ]
+def test_parses_cases_steps_and_metadata(parser, plan_source, plan_options) -> None:
+    result = parser.parse(plan_source, plan_options)
+    assert [c.title for c in result.cases] == ["print all info", "check sensors"]
     first = result.cases[0]
-    assert first.metadata["id"] == "TC-001"
-    assert first.case_id == "TC-001"
-    assert len(first.steps) == 4
-    assert first.steps[0].title == "Power on the device"
+    assert first.metadata["id"] == "TC-100"
+    assert first.case_id == "TC-100"
+    assert len(first.steps) == 3
+    assert first.steps[0].title == "Print the build version"
 
 
-def test_description_keeps_raw_markdown(parser, plan_source: str) -> None:
-    step = parser.parse(plan_source).cases[0].steps[1]
+def test_description_keeps_raw_markdown(parser, plan_source, plan_options) -> None:
+    step = parser.parse(plan_source, plan_options).cases[0].steps[1]
     # The fenced block must survive untouched; templates decide how to show it.
     assert "```" in step.description_md
-    assert "> 0x01 0x00" in step.description_md
+    assert "> GET_ID" in step.description_md
 
 
 @pytest.mark.parametrize(

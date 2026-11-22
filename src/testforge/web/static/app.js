@@ -218,6 +218,7 @@ els.source.addEventListener("input", () => {
 });
 els.device.addEventListener("change", () => {
   describeDevice();
+  syncExampleButton();
   schedulePreview(0);
 });
 els.stepLevel.addEventListener("change", () => schedulePreview(0));
@@ -227,11 +228,30 @@ $("#toggle-advanced").addEventListener("click", () => {
   els.advanced.hidden = !els.advanced.hidden;
 });
 
+// Each device ships its own sample, because a plan written for one device's
+// heading conventions parses to nothing under another's.
+function examplePlanFor(deviceId) {
+  const node = document.querySelector(`.example-plan[data-device="${deviceId}"]`);
+  // textContent, not innerHTML: the browser has already decoded the entities.
+  return node ? node.content.textContent : "";
+}
+
 $("#load-example").addEventListener("click", () => {
-  els.source.value = $("#example-plan").innerHTML.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const plan = examplePlanFor(els.device.value);
+  if (!plan.trim()) {
+    els.editorStatus.textContent = "這個 device 沒有附範例計畫";
+    return;
+  }
+  els.source.value = plan;
   updateEditorStatus();
   schedulePreview(0);
 });
+
+function syncExampleButton() {
+  const has = Boolean(examplePlanFor(els.device.value).trim());
+  $("#load-example").disabled = !has;
+  $("#load-example").title = has ? "" : "這個 device 沒有附範例計畫";
+}
 
 $("#clear").addEventListener("click", () => {
   els.source.value = "";
@@ -256,4 +276,5 @@ els.file.addEventListener("change", (ev) => {
 });
 
 describeDevice();
+syncExampleButton();
 updateEditorStatus();

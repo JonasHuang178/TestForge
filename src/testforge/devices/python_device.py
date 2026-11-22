@@ -72,6 +72,22 @@ class PythonDevice:
         return self._directory
 
     @property
+    def example_plan(self) -> str | None:
+        """A sample plan shipped with the device, if it declares one.
+
+        Lets the page offer an example that matches the selected device rather
+        than one fixed sample that only parses under one device's conventions.
+        """
+        name = getattr(self._module, "EXAMPLE_PLAN", None)
+        if not name:
+            return None
+        path = self._directory / name
+        if not path.is_file():
+            return None
+        with open(path, encoding="utf-8", newline="") as handle:
+            return handle.read()
+
+    @property
     def builds_whole_plan(self) -> bool:
         """True when the module writes every case into the same file(s).
 

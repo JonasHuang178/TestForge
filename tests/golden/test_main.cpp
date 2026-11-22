@@ -2,7 +2,7 @@
 
 // === TESTFORGE:TEST_CASES:BEGIN ===
 // Test case: print all info
-// Plan line 17
+// Plan line 16
 int printAllInfo()
 {
     // Step1 Print the build version
@@ -12,6 +12,12 @@ int printAllInfo()
 
     // Step2 Print the device id
     // Read the id from EEPROM and print it as hex.
+    //
+    // ```
+    // > GET_ID
+    // < 0x4A 0x1F 0x00 0x02
+    // ```
+    // Expected: The id matches the label on the board.
     // TODO: implement this step.
 
     // Step3 Print the uptime
@@ -22,7 +28,7 @@ int printAllInfo()
 }
 
 // Test case: check sensors
-// Plan line 33
+// Plan line 44
 int checkSensors()
 {
     // Step1 Read the temperature

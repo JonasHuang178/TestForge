@@ -36,6 +36,10 @@ CASE_SECTION = "Test Case List"
 CASE_HEADING_LEVEL = 3
 STEP_HEADING_LEVEL = 4
 
+#: Loaded by the web page's "load example" button, so the sample always
+#: matches the device that is selected.
+EXAMPLE_PLAN = "example_plan.md"
+
 TEMPLATE = Path(__file__).parent / "main.cpp"
 OUTPUT_NAME = "test_main.cpp"
 

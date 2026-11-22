@@ -13,10 +13,17 @@ import zipfile
 
 from fastapi.testclient import TestClient
 
+#: Default conventions (H1 case, H2 steps), for the routes that accept no
+#: device and therefore cannot adopt one's heading levels.
+DEFAULT_PLAN = "# A case\n\n## Step 1: Do it\n\nbody\n\n**Expected:** it works.\n"
+
 PLAN = (
-    "# Test Case: Sensor Init\n\n- ID: TC-001\n\n"
-    "## Step 1: Power on\n\nDrive the enable line high.\n\n"
-    "**Expected:** READY within 500 ms.\n"
+    "## Test Case List\n\n"
+    "### print all info\n\n"
+    "- ID: TC-100\n\n"
+    "#### Step 1 Print the build version\n\n"
+    "Call the version helper and write it to stdout.\n\n"
+    "**Expected:** A non-empty version string is printed.\n"
 )
 
 
@@ -25,7 +32,7 @@ def test_root_serves_the_page(client: TestClient) -> None:
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     # The device the registry holds must be offered, or nothing can be generated.
-    assert "demo_board" in response.text
+    assert "simple_cpp" in response.text
 
 
 def test_static_assets_are_served(client: TestClient) -> None:
@@ -45,77 +52,81 @@ def test_page_has_no_external_asset_references(client: TestClient) -> None:
 
 
 def test_preview_returns_the_outline(client: TestClient) -> None:
-    response = client.post("/preview", data={"source": PLAN, "device_id": "demo_board"})
+    response = client.post("/preview", data={"source": PLAN, "device_id": "simple_cpp"})
     assert response.status_code == 200
-    assert "Sensor Init" in response.text
-    assert "Power on" in response.text
-    assert "TC-001" in response.text
+    assert "print all info" in response.text
+    assert "Print the build version" in response.text
+    assert "TC-100" in response.text
 
 
 def test_preview_of_empty_source_is_not_an_error(client: TestClient) -> None:
-    response = client.post("/preview", data={"source": "   ", "device_id": "demo_board"})
+    response = client.post("/preview", data={"source": "   ", "device_id": "simple_cpp"})
     assert response.status_code == 200
     assert "case" not in response.text.lower() or "empty" in response.text.lower()
 
 
 def test_preview_reports_diagnostics_without_failing(client: TestClient) -> None:
-    misnumbered = PLAN + "\n## Step 9: Second\n\nDo more.\n\n**Expected:** fine.\n"
+    misnumbered = PLAN + "\n#### Step 9 Second\n\nDo more.\n\n**Expected:** fine.\n"
     response = client.post(
-        "/preview", data={"source": misnumbered, "device_id": "demo_board"}
+        "/preview", data={"source": misnumbered, "device_id": "simple_cpp"}
     )
     assert response.status_code == 200
     assert "step.index_mismatch" in response.text
 
 
 def test_preview_honours_the_step_level_override(client: TestClient) -> None:
-    deep = "# Test Case: C\n\n### Step 1: Deep\n\nbody\n"
-    default = client.post("/preview", data={"source": deep, "device_id": "demo_board"})
+    deep = "## Test Case List\n\n### a case\n\n##### Step 1 Deep\n\nbody\n"
+    default = client.post("/preview", data={"source": deep, "device_id": "simple_cpp"})
     assert "Deep" not in default.text
 
     overridden = client.post(
-        "/preview", data={"source": deep, "device_id": "demo_board", "step_level": "3"}
+        "/preview", data={"source": deep, "device_id": "simple_cpp", "step_level": "5"}
     )
     assert "Deep" in overridden.text
 
 
 def test_generate_returns_the_artifacts(client: TestClient) -> None:
-    response = client.post("/generate", data={"source": PLAN, "device_id": "demo_board"})
+    response = client.post("/generate", data={"source": PLAN, "device_id": "simple_cpp"})
     assert response.status_code == 200
-    assert "test_sensor_init.h" in response.text
-    assert "test_sensor_init.cpp" in response.text
-    assert "TestStep_01_PowerOn" in response.text
+    assert "test_main.cpp" in response.text
+    assert "test_main.cpp" in response.text
+    assert "printAllInfo" in response.text
 
 
 def test_generate_renders_failure_in_place(client: TestClient) -> None:
     # The page must keep the author's plan and their place, so a domain failure
     # comes back as a fragment with HTTP 200 rather than as an error status.
     response = client.post(
-        "/generate", data={"source": "no headings here", "device_id": "demo_board"}
+        "/generate", data={"source": "no headings here", "device_id": "simple_cpp"}
     )
     assert response.status_code == 200
     assert "document.unprocessable" in response.text
-    assert "document.no_test_case" in response.text
+    # This device confines cases to a named section, so a bare document fails
+    # on the section being absent.
+    assert "document.section_not_found" in response.text
 
 
 def test_generate_with_case_selector_narrows_the_output(client: TestClient) -> None:
-    two_cases = PLAN + "\n# Test Case: Second\n\n## Step 1: Reset\n\nbody\n"
+    two_cases = PLAN + "\n### check sensors\n\n#### Step 1 Read it\n\nbody\n"
     response = client.post(
         "/generate",
-        data={"source": two_cases, "device_id": "demo_board", "case_selector": "2"},
+        data={"source": two_cases, "device_id": "simple_cpp", "case_selector": "2"},
     )
-    assert "test_second.cpp" in response.text
-    assert "test_sensor_init.cpp" not in response.text
+    # Both cases share one file, so narrowing shows in the content, not the
+    # file list.
+    assert "int checkSensors()" in response.text
+    assert "int printAllInfo()" not in response.text
 
 
 def test_download_zip(client: TestClient) -> None:
     response = client.post(
-        "/download", data={"source": PLAN, "device_id": "demo_board", "what": "zip"}
+        "/download", data={"source": PLAN, "device_id": "simple_cpp", "what": "zip"}
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
     assert "attachment;" in response.headers["content-disposition"]
     names = zipfile.ZipFile(io.BytesIO(response.content)).namelist()
-    assert names == ["test_sensor_init.h", "test_sensor_init.cpp"]
+    assert names == ["test_main.cpp"]
 
 
 def test_download_single_file(client: TestClient) -> None:
@@ -123,27 +134,27 @@ def test_download_single_file(client: TestClient) -> None:
         "/download",
         data={
             "source": PLAN,
-            "device_id": "demo_board",
+            "device_id": "simple_cpp",
             "what": "file",
-            "path": "test_sensor_init.cpp",
+            "path": "test_main.cpp",
         },
     )
     assert response.status_code == 200
-    assert "test_sensor_init.cpp" in response.headers["content-disposition"]
-    assert "TestStep_01_PowerOn" in response.text
+    assert "test_main.cpp" in response.headers["content-disposition"]
+    assert "printAllInfo" in response.text
 
 
 def test_download_matches_what_was_displayed(client: TestClient) -> None:
     # The download re-runs the generation instead of caching it, which is only
     # safe because generation is deterministic. Prove the two agree.
-    shown = client.post("/generate", data={"source": PLAN, "device_id": "demo_board"})
+    shown = client.post("/generate", data={"source": PLAN, "device_id": "simple_cpp"})
     downloaded = client.post(
         "/download",
         data={
             "source": PLAN,
-            "device_id": "demo_board",
+            "device_id": "simple_cpp",
             "what": "file",
-            "path": "test_sensor_init.h",
+            "path": "test_main.cpp",
         },
     )
     for line in downloaded.text.splitlines():
