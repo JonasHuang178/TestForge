@@ -30,7 +30,10 @@ def plan_options() -> ParseOptions:
     """The conventions that sample is written in, for tests that parse it
     without going through a device."""
     return ParseOptions(
-        case_heading_level=3, step_heading_level=4, case_section="Test Case List"
+        case_heading_level=3,
+        case_section="Test Case List",
+        step_style="line",
+        case_table=True,
     )
 
 

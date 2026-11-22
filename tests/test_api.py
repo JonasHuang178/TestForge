@@ -6,12 +6,15 @@ import zipfile
 from fastapi.testclient import TestClient
 
 PLAN = (
-    "## Test Case List\n\n"
-    "### print all info\n\n"
-    "- ID: TC-100\n\n"
-    "#### Step 1 Print the build version\n\n"
-    "Call the version helper and write it to stdout.\n\n"
-    "**Expected:** A non-empty version string is printed.\n"
+    '## Test Case List\n'
+    '\n'
+    '| ID | Test Name |\n'
+    '|---|---|\n'
+    '| TC-100 | print all info |\n'
+    '\n'
+    '### print all info\n'
+    'Step 1 Print the build version  \n'
+    'Step 2 Print the device id  \n'
 )
 
 #: Default conventions (H1 case, H2 steps), for the endpoints that accept no
@@ -30,7 +33,9 @@ def test_list_and_get_device(client: TestClient) -> None:
     assert [d["id"] for d in listed] == ["simple_cpp"]
 
     detail = client.get("/api/v1/devices/simple_cpp").json()
-    assert detail["step_heading_level"] == 4
+    assert detail["case_heading_level"] == 3
+    assert detail["step_style"] == "line"
+    assert detail["case_table"] is True
     assert detail["anchor"]["begin"] == "// === TESTFORGE:{name}:BEGIN ==="
 
 
@@ -50,10 +55,7 @@ def test_parse_returns_ir_and_diagnostics(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["cases"][0]["id"] == "TC-100"
-    assert (
-        body["cases"][0]["steps"][0]["expected"]
-        == "A non-empty version string is printed."
-    )
+    assert body["cases"][0]["steps"][0]["title"] == "Print the build version"
 
 
 def test_parse_needs_no_device(client: TestClient) -> None:

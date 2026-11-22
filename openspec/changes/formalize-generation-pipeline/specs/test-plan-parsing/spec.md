@@ -150,6 +150,67 @@ the case heading level for unrelated sections can still be parsed.
   enforcement is enabled
 - **THEN** only `Real` is produced as a case
 
+### Requirement: Steps may be written as lines instead of headings
+
+A device SHALL be able to declare that a step is a plain line beginning with
+the step keyword, rather than a heading. The keyword SHALL be mandatory in
+that mode, because without it any prose or numbered line under a case would
+become a step. Lines following a step line, up to the next one, SHALL be that
+step's description.
+
+#### Scenario: Steps listed as lines
+
+- **WHEN** a case body holds two lines beginning with the step keyword
+- **THEN** two steps are produced, in the order written
+- **AND** a markdown hard break at the end of a line is not part of the title
+
+#### Scenario: Prose is not a step
+
+- **WHEN** a case body holds a descriptive paragraph and a numbered note,
+  neither beginning with the step keyword
+- **THEN** neither becomes a step
+
+#### Scenario: A note under a step is its description
+
+- **WHEN** a line step is followed by text before the next step line
+- **THEN** that text is the step's description, and an expectation inside it
+  is extracted as usual
+
+### Requirement: A table may index the cases
+
+A device SHALL be able to declare that a table between the section heading and
+the first case is a case index. The column naming the case SHALL link each row
+to it, and the remaining columns SHALL become that case's metadata. Metadata
+written under the case itself is more specific and SHALL win on a clash.
+
+#### Scenario: Identifiers come from the table
+
+- **WHEN** the table lists a case with an ID and an owner
+- **THEN** that case carries both as metadata, and its identifier is the ID
+
+#### Scenario: Names are matched without regard to case
+
+- **WHEN** the table and the heading differ only in letter case
+- **THEN** the row still matches
+
+#### Scenario: A case the table omits
+
+- **WHEN** a case has no row in the table
+- **THEN** it is still produced, carries no identifier, and an advisory
+  diagnostic notes the omission
+
+#### Scenario: The table has no column naming the case
+
+- **WHEN** no column header identifies the case
+- **THEN** a warning is reported and no metadata is attached, rather than a
+  column being guessed
+
+#### Scenario: No table at all
+
+- **WHEN** the section holds no table
+- **THEN** the cases are produced without identifiers and no diagnostic is
+  reported
+
 ### Requirement: Cases may be confined to a named section
 
 A device SHALL be able to name the section that holds its test cases. When one

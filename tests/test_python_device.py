@@ -23,34 +23,32 @@ from testforge.service import GenerationService
 DEVICES = Path(__file__).resolve().parents[1] / "devices"
 
 #: Written in simple_cpp's conventions: a named section, H3 cases, H4 steps.
-PLAN = textwrap.dedent(
-    """\
-    ## Test Case List
-
-    ### print all info
-
-    - ID: TC-100
-
-    #### Step 1 Print the build version
-
-    Call the version helper.
-
-    **Expected:** A non-empty version string is printed.
-
-    #### Step 2 Print the device id
-
-    Read it from EEPROM.
-    """
+PLAN = (
+    '## Test Case List\n'
+    '\n'
+    '| ID | Test Name |\n'
+    '|---|---|\n'
+    '| TC-100 | print all info |\n'
+    '\n'
+    '### print all info\n'
+    'Step 1 Print the build version  \n'
+    'Step 2 Print the device id  \n'
 )
 
-TWO_CASES = PLAN + textwrap.dedent(
-    """
-    ### check sensors
-
-    #### Step 1 Read the temperature
-
-    Poll the sensor once.
-    """
+TWO_CASES = (
+    '## Test Case List\n'
+    '\n'
+    '| ID | Test Name |\n'
+    '|---|---|\n'
+    '| TC-100 | print all info |\n'
+    '| TC-101 | check sensors |\n'
+    '\n'
+    '### print all info\n'
+    'Step 1 Print the build version  \n'
+    'Step 2 Print the device id  \n'
+    '\n'
+    '### check sensors\n'
+    'Step 1 Read the temperature  \n'
 )
 
 #: For devices built in a temporary directory, which take the default
@@ -70,8 +68,9 @@ def test_device_loads_from_a_python_module(device_service: GenerationService) ->
     device = device_service.registry.get("simple_cpp")
     assert device.name == "Simple C++"
     assert device.parse_options.case_heading_level == 3
-    assert device.parse_options.step_heading_level == 4
     assert device.parse_options.case_section == "Test Case List"
+    assert device.parse_options.step_style == "line"
+    assert device.parse_options.case_table
     assert device.builds_whole_plan
 
 
@@ -126,7 +125,7 @@ def test_headings_outside_the_named_section_are_ignored(
 ) -> None:
     plan = (
         "## Environment\n\n### Hardware\n\nNot a case.\n\n"
-        "## Test Case List\n\n### real case\n\n#### Step 1 Do it\n\nbody\n"
+        "## Test Case List\n\n### real case\nStep 1 Do it\n"
     )
     result = device_service.generate(plan, "simple_cpp")
     assert result.summary.cases == 1

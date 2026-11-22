@@ -155,9 +155,9 @@ anchor 的問題回 422 而不是 409：它的本質是「你給的這份輸入�
 
 ## 計畫格式
 
-標題層級與 case 所在的區段都由 device 決定，所以你的團隊不必改既有的文件排版。以下是 `simple_cpp` 預期的格式（完整版見 `devices/simple_cpp/example_plan.md`）：
+標題層級、步驟寫法、case 所在區段都由 device 決定，所以你的團隊不必改既有的文件排版。以下是 `simple_cpp` 預期的格式（完整版見 `devices/simple_cpp/example_plan.md`）：
 
-```markdown
+````markdown
 # Console App Test Plan
 
 ## Purpose
@@ -166,28 +166,27 @@ anchor 的問題回 422 而不是 409：它的本質是「你給的這份輸入�
 
 ## Test Case List
 
+| ID | Test Name |
+|---|---|
+| TC-100 | print all info |
+| TC-101 | check sensors |
+
 ### print all info
+Step 1 Print the build version  
+Step 2 Print the device id  
 
-#### Step 1 Print the build version
+### check sensors
+Step 1 Read the temperature  
+````
 
-Call the version helper and write it to stdout.
+* **`## Test Case List`** 是裝 case 的區段（`CASE_SECTION`）。**只有這個區段裡面**的標題會被當成 test case，上面的 `## Purpose` 連同它的子標題都會被忽略。不設定的話整份文件都會被掃描。
+* **表格是 case 索引**（`CASE_TABLE`）。`Test Name` 欄對應到 case 標題，其餘欄位變成那個 case 的 metadata，所以 `TC-100` 會出現在產生的程式碼註解裡。欄名可以是 `Test Name`、`Name`、`Case`、`測試名稱` 等。沒有表格也能運作，只是 case 就沒有 ID。
+* **`### <名稱>`** 開始一個 test case（`CASE_HEADING_LEVEL`）。
+* **`Step N <標題>`** 是一個步驟——**純文字行，不是標題**（`STEP_STYLE = "line"`）。`Step` 這個字是必要的，否則 case 底下的任何說明文字都會被當成步驟。行尾兩個空格是 markdown 的換行，不會進標題。
+* 步驟一律以**出現位置**編號。寫的數字若與位置不符會發出 `step.index_mismatch`，不會默默重新編號。
+* 步驟下面接的文字會成為它的說明，`**Expected:**` 會被抽出成預期結果。你的格式裡沒有用到，但支援。
 
-**Expected:** A non-empty version string is printed.
-
-#### Step 2 Print the device id
-
-Read the id from EEPROM.
-```
-
-* **`## Test Case List`** 是裝 case 的區段。device 用 `CASE_SECTION` 指定它之後，**只有這個區段裡面**的標題會被當成 test case——上面的 `## Purpose`、`## Environment` 連同它們的子標題都會被忽略。不設定 `CASE_SECTION` 的話，整份文件都會被掃描。
-* **`### <名稱>`** 開始一個 test case（層級由 `CASE_HEADING_LEVEL` 決定）。
-* **`#### Step N <標題>`** 開始一個步驟（層級由 `STEP_HEADING_LEVEL` 決定）。數字後面接空格或 `:`、`.`、`-` 都可以。有 `Step` 這個字時數字後面只有空格也行；沒有 `Step` 時必須有分隔符號，否則像「2024 annual check」這種標題會被誤判成第 2024 步。
-* 步驟一律以**出現位置**編號。標題裡寫的數字若與位置不符會發出 `step.index_mismatch`，不會默默重新編號。
-* `**Expected:**`、`Expected:`、`Expected result:`、`預期結果：` 都能開啟一段預期結果。
-* 緊接在 case 標題下的 bullet list 是 metadata（`Key: Value`）。
-* 步驟正文保留原始 markdown，包含 fenced code block。fence 裡的 `#` 絕不會被誤認成標題。
-
-這些都由 `device.py` 設定，所以另一個 device 可以用完全不同的慣例，共用同一個解析器。
+另一種寫法是讓每個步驟自己當標題（`STEP_STYLE = "heading"`，預設），搭配 `STEP_HEADING_LEVEL`。同一個解析器兩種都支援，由 device 選。
 
 ## 新增一個 device
 
@@ -231,7 +230,19 @@ def build_all(cases):
 
 `build` 和 `build_all` **必須且只能定義一個**，載入時會檢查。選錯會壞：若所有 case 共用一個檔案卻用 `build(case)`，每個 case 都會覆寫同一塊 anchor 區域，只有最後一個留下來。
 
-可選的有 `DESCRIPTION`、`VERSION`、`CASE_HEADING_LEVEL`、`STEP_HEADING_LEVEL`、`CASE_SECTION`、`SECTION_HEADING_LEVEL`、`ANCHOR_BEGIN`、`ANCHOR_END`、`EXAMPLE_PLAN`。
+可選的（全部與讀取計畫有關，或與輸出外觀有關）：
+
+| 常數 | 預設 | 作用 |
+|---|---|---|
+| `DESCRIPTION`、`VERSION` | — | 顯示用 |
+| `CASE_HEADING_LEVEL` | 1 | 哪一級標題是 test case |
+| `STEP_STYLE` | `"heading"` | `"heading"` 步驟是標題；`"line"` 步驟是 `Step N ...` 文字行 |
+| `STEP_HEADING_LEVEL` | 2 | 僅 `"heading"` 模式使用 |
+| `CASE_SECTION` | 無 | 只在這個區段裡找 case |
+| `SECTION_HEADING_LEVEL` | case 層級減一 | `CASE_SECTION` 的標題層級 |
+| `CASE_TABLE` | `False` | 把區段開頭的表格讀成 case 索引 |
+| `ANCHOR_BEGIN`、`ANCHOR_END` | `// === TESTFORGE:{name}:... ===` | 標記寫法 |
+| `EXAMPLE_PLAN` | 無 | 範例計畫檔名，給 web 的「載入範例」用 |
 
 `output()` 的三個部分：
 

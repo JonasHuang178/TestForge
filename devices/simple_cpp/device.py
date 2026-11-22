@@ -34,7 +34,14 @@ DESCRIPTION = "One .cpp for the whole plan: a function per test case, called fro
 #: environment, revision history — is never mistaken for one.
 CASE_SECTION = "Test Case List"
 CASE_HEADING_LEVEL = 3
-STEP_HEADING_LEVEL = 4
+
+#: Steps are plain lines under the case heading (`Step 1 Print the version`),
+#: not headings of their own.
+STEP_STYLE = "line"
+
+#: The `| ID | Test Name |` table under the section heading is a case index:
+#: each row's other columns become that case's metadata.
+CASE_TABLE = True
 
 #: Loaded by the web page's "load example" button, so the sample always
 #: matches the device that is selected.
@@ -114,8 +121,12 @@ def _prepare_skeleton():
 
 def _case_function(case):
     """One test case -> one `int <name>()` with a block per step."""
-    lines = [
-        f"// Test case: {case.title}",
+    lines = [f"// Test case: {case.title}"]
+    if case.case_id:
+        # Comes from the ID column of the case table, so the generated code
+        # can be traced back to the row that asked for it.
+        lines.append(f"// Plan ID:   {case.case_id}")
+    lines += [
         f"// Plan line {case.source_line}",
         f"int {_case_function_name(case)}()",
         "{",
@@ -143,7 +154,9 @@ def build_all(cases):
     """
     functions = "\n\n".join(_case_function(c) for c in cases)
     calls = "\n\n".join(
-        f"// Step{c.index}\n{_case_function_name(c)}();" for c in cases
+        f"// Step{c.index}" + (f"  {c.case_id}" if c.case_id else "")
+        + f"\n{_case_function_name(c)}();"
+        for c in cases
     )
     return [
         output(

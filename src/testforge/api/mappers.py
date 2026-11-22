@@ -117,6 +117,8 @@ def device_detail(device: PythonDevice) -> DeviceDetail:
         version=device.version,
         case_heading_level=device.parse_options.case_heading_level,
         step_heading_level=device.parse_options.step_heading_level,
+        step_style=device.parse_options.step_style,
+        case_table=device.parse_options.case_table,
         anchor=AnchorStyleOut(
             begin=device.anchor_style.begin, end=device.anchor_style.end
         ),

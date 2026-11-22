@@ -14,12 +14,15 @@ from click.testing import CliRunner
 from testforge.cli import _read_verbatim, _write_verbatim, main
 
 PLAN = (
-    "## Test Case List\n\n"
-    "### print all info\n\n"
-    "- ID: TC-100\n\n"
-    "#### Step 1 Print the build version\n\n"
-    "Call the version helper and write it to stdout.\n\n"
-    "**Expected:** A non-empty version string is printed.\n"
+    '## Test Case List\n'
+    '\n'
+    '| ID | Test Name |\n'
+    '|---|---|\n'
+    '| TC-100 | print all info |\n'
+    '\n'
+    '### print all info\n'
+    'Step 1 Print the build version  \n'
+    'Step 2 Print the device id  \n'
 )
 
 

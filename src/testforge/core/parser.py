@@ -30,6 +30,17 @@ _STEP_TITLE_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: A step written as a line rather than a heading: `Step 1 Print the version`.
+#: The keyword is mandatory here — without it every numbered or indented line
+#: in a case body would become a step.
+_STEP_LINE_RE = re.compile(
+    r"^\s*(?:step|步驟|步骤)\s*(\d+)\s*[:.)\-–—：]?\s*(.*?)\s*$",
+    re.IGNORECASE,
+)
+
+#: Column headers that identify which case a table row describes.
+_NAME_COLUMNS = ("test name", "name", "case", "test case", "測試名稱", "名稱", "案例")
+
 #: `- ID: TC-001`, `* **Author:** Jonas`, `- 裝置：foo`
 _METADATA_RE = re.compile(
     r"^\s*[-*+]\s+\*{0,2}\s*([^:：*]{1,40}?)\s*\*{0,2}\s*[:：]\s*(.+?)\s*$"
@@ -136,6 +147,11 @@ class MarkdownTestPlanParser:
                 line=1,
             )
 
+        case_index: dict[str, dict[str, str]] = {}
+        if opts.case_table:
+            table_end = case_headings[0].line if case_headings else scan_to
+            case_index = self._case_index(lines[scan_from:table_end], diag)
+
         cases: list[TestCase] = []
         seen_titles: dict[str, int] = {}
         for ordinal, heading in enumerate(case_headings, start=1):
@@ -143,12 +159,19 @@ class MarkdownTestPlanParser:
                 self._next_boundary(headings, heading, opts.case_heading_level, len(lines)),
                 scan_to,
             )
-            case = self._build_case(ordinal, heading, end, lines, headings, opts, diag)
+            case = self._build_case(
+                ordinal, heading, end, lines, headings, opts, diag, case_index
+            )
             if not case.steps:
                 diag.warning(
                     "case.no_steps",
-                    f"Test case {case.title!r} has no level-"
-                    f"{opts.step_heading_level} step headings; it is skipped.",
+                    f"Test case {case.title!r} has no steps "
+                    + (
+                        "(no line begins with the word Step)"
+                        if opts.step_style == "line"
+                        else f"(no level-{opts.step_heading_level} step headings)"
+                    )
+                    + "; it is skipped.",
                     line=heading.line + 1,
                     case_index=ordinal,
                 )
@@ -191,6 +214,56 @@ class MarkdownTestPlanParser:
             body_start = token.map[1] if token.map[1] > start else start + 1
             headings.append(_Heading(level=level, text=text, line=start, body_start=body_start))
         return headings
+
+    @staticmethod
+    def _parse_table(lines: list[str]) -> list[dict[str, str]]:
+        """Read the first pipe table in ``lines`` as a list of row mappings.
+
+        Deliberately hand-rolled rather than taken from the token stream: a
+        table is tabular data here, not formatting, and the cells are wanted
+        as plain text with their header as the key.
+        """
+        rows: list[dict[str, str]] = []
+        header: list[str] | None = None
+        for line in lines:
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                if header is not None:
+                    break  # the table has ended
+                continue
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            if header is None:
+                header = [c.casefold() for c in cells]
+                continue
+            if all(set(c) <= set("-: ") for c in cells):
+                continue  # the |---|---| separator
+            rows.append(dict(zip(header, cells)))
+        return rows
+
+    @classmethod
+    def _case_index(
+        cls, lines: list[str], diag: DiagnosticCollector
+    ) -> dict[str, dict[str, str]]:
+        """Case title (casefolded) -> the metadata its table row carries."""
+        index: dict[str, dict[str, str]] = {}
+        for row in cls._parse_table(lines):
+            name_key = next((k for k in _NAME_COLUMNS if k in row), None)
+            if name_key is None:
+                diag.warning(
+                    "case_table.no_name_column",
+                    f"The case table has no column naming the case; expected "
+                    f"one of: {', '.join(_NAME_COLUMNS)}.",
+                )
+                return {}
+            title = row.get(name_key, "").strip()
+            if not title:
+                continue
+            index[title.casefold()] = {
+                re.sub(r"\s+", "_", k): v
+                for k, v in row.items()
+                if k != name_key and v
+            }
+        return index
 
     @staticmethod
     def _section_bounds(
@@ -243,7 +316,105 @@ class MarkdownTestPlanParser:
         headings: list[_Heading],
         opts: ParseOptions,
         diag: DiagnosticCollector,
+        case_index: dict[str, dict[str, str]] | None = None,
     ) -> TestCase:
+        title = self._strip_case_prefix(heading.text, opts)
+
+        if opts.step_style == "line":
+            metadata, description, steps = self._line_case_body(
+                lines, heading.body_start, end, ordinal, diag
+            )
+        else:
+            metadata, description, steps = self._heading_case_body(
+                lines, heading, end, headings, opts, ordinal, diag
+            )
+
+        from_table = (case_index or {}).get(title.casefold())
+        if from_table:
+            # The table is the index; a bullet written under the case itself
+            # is more specific, so it wins on a clash.
+            metadata = {**from_table, **metadata}
+        elif case_index:
+            diag.info(
+                "case_table.missing_entry",
+                f"Test case {title!r} has no row in the case table.",
+                line=heading.line + 1,
+                case_index=ordinal,
+            )
+
+        return TestCase(
+            index=ordinal,
+            title=title,
+            metadata=metadata,
+            description_md=description,
+            steps=tuple(steps),
+            source_line=heading.line + 1,
+        )
+
+    def _line_case_body(
+        self,
+        lines: list[str],
+        start: int,
+        end: int,
+        ordinal: int,
+        diag: DiagnosticCollector,
+    ) -> tuple[dict[str, str], str, list[TestStep]]:
+        """Steps written as plain lines under the case heading.
+
+        Everything before the first step line is the case's preamble; a step
+        owns the lines between it and the next, so a note under a step still
+        becomes its description.
+        """
+        marks = [
+            (i, _STEP_LINE_RE.match(lines[i]))
+            for i in range(start, end)
+            if _STEP_LINE_RE.match(lines[i])
+        ]
+        preamble_end = marks[0][0] if marks else end
+        metadata, description = self._split_preamble(
+            lines[start:preamble_end], start, ordinal, diag
+        )
+
+        steps: list[TestStep] = []
+        for position, (line_no, match) in enumerate(marks, start=1):
+            declared = int(match.group(1))
+            step_title = match.group(2).strip() or lines[line_no].strip()
+            body_end = marks[position][0] if position < len(marks) else end
+            body = "\n".join(lines[line_no + 1 : body_end]).strip()
+            body, expected = self._split_expected(body)
+
+            if declared != position:
+                diag.warning(
+                    "step.index_mismatch",
+                    f"Step is numbered {declared} in the plan but is at "
+                    f"position {position}; the generated name uses {position}.",
+                    line=line_no + 1,
+                    case_index=ordinal,
+                    step_index=position,
+                )
+
+            steps.append(
+                TestStep(
+                    index=position,
+                    declared_index=declared,
+                    title=step_title,
+                    description_md=body,
+                    expected=expected,
+                    source_line=line_no + 1,
+                )
+            )
+        return metadata, description, steps
+
+    def _heading_case_body(
+        self,
+        lines: list[str],
+        heading: _Heading,
+        end: int,
+        headings: list[_Heading],
+        opts: ParseOptions,
+        ordinal: int,
+        diag: DiagnosticCollector,
+    ) -> tuple[dict[str, str], str, list[TestStep]]:
         step_headings = [
             h
             for h in headings
@@ -267,15 +438,7 @@ class MarkdownTestPlanParser:
                     position, step_heading, step_end, lines, ordinal, diag
                 )
             )
-
-        return TestCase(
-            index=ordinal,
-            title=self._strip_case_prefix(heading.text, opts),
-            metadata=metadata,
-            description_md=description,
-            steps=tuple(steps),
-            source_line=heading.line + 1,
-        )
+        return metadata, description, steps
 
     def _split_preamble(
         self,

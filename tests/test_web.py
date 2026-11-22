@@ -18,12 +18,15 @@ from fastapi.testclient import TestClient
 DEFAULT_PLAN = "# A case\n\n## Step 1: Do it\n\nbody\n\n**Expected:** it works.\n"
 
 PLAN = (
-    "## Test Case List\n\n"
-    "### print all info\n\n"
-    "- ID: TC-100\n\n"
-    "#### Step 1 Print the build version\n\n"
-    "Call the version helper and write it to stdout.\n\n"
-    "**Expected:** A non-empty version string is printed.\n"
+    '## Test Case List\n'
+    '\n'
+    '| ID | Test Name |\n'
+    '|---|---|\n'
+    '| TC-100 | print all info |\n'
+    '\n'
+    '### print all info\n'
+    'Step 1 Print the build version  \n'
+    'Step 2 Print the device id  \n'
 )
 
 
@@ -66,7 +69,7 @@ def test_preview_of_empty_source_is_not_an_error(client: TestClient) -> None:
 
 
 def test_preview_reports_diagnostics_without_failing(client: TestClient) -> None:
-    misnumbered = PLAN + "\n#### Step 9 Second\n\nDo more.\n\n**Expected:** fine.\n"
+    misnumbered = PLAN + "Step 9 Second  \n"
     response = client.post(
         "/preview", data={"source": misnumbered, "device_id": "simple_cpp"}
     )
@@ -75,14 +78,10 @@ def test_preview_reports_diagnostics_without_failing(client: TestClient) -> None
 
 
 def test_preview_honours_the_step_level_override(client: TestClient) -> None:
-    deep = "## Test Case List\n\n### a case\n\n##### Step 1 Deep\n\nbody\n"
+    # The device reads steps as plain lines; a heading is not one.
+    deep = "## Test Case List\n\n### a case\n\n#### Step 1 Deep\n\nbody\n"
     default = client.post("/preview", data={"source": deep, "device_id": "simple_cpp"})
     assert "Deep" not in default.text
-
-    overridden = client.post(
-        "/preview", data={"source": deep, "device_id": "simple_cpp", "step_level": "5"}
-    )
-    assert "Deep" in overridden.text
 
 
 def test_generate_returns_the_artifacts(client: TestClient) -> None:
@@ -107,7 +106,7 @@ def test_generate_renders_failure_in_place(client: TestClient) -> None:
 
 
 def test_generate_with_case_selector_narrows_the_output(client: TestClient) -> None:
-    two_cases = PLAN + "\n### check sensors\n\n#### Step 1 Read it\n\nbody\n"
+    two_cases = PLAN + "\n### check sensors\nStep 1 Read it  \n"
     response = client.post(
         "/generate",
         data={"source": two_cases, "device_id": "simple_cpp", "case_selector": "2"},

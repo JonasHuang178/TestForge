@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -28,6 +30,19 @@ class ParseOptions(BaseModel):
         description="When set, only headings inside the section with this "
         "title count as test cases. Lets a plan carry other sections at the "
         "same heading level without them being mistaken for cases.",
+    )
+    step_style: Literal["heading", "line"] = Field(
+        default="heading",
+        description="`heading`: a step is a heading at `step_heading_level`. "
+        "`line`: a step is a plain line beginning with the word Step, which "
+        "suits plans that list steps compactly under each case.",
+    )
+    case_table: bool = Field(
+        default=False,
+        description="When true, a markdown table between the section heading "
+        "and the first case is read as a case index: the column naming the "
+        "case links each row to it, and the other columns become that case's "
+        "metadata.",
     )
     section_heading_level: int | None = Field(
         default=None,

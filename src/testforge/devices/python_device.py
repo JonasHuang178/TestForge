@@ -59,6 +59,8 @@ class PythonDevice:
             step_heading_level=int(getattr(module, "STEP_HEADING_LEVEL", 2)),
             case_section=getattr(module, "CASE_SECTION", None),
             section_heading_level=int(section_level) if section_level else None,
+            step_style=getattr(module, "STEP_STYLE", "heading"),
+            case_table=bool(getattr(module, "CASE_TABLE", False)),
         )
         # A device emitting C89, where // is not a comment, can declare a
         # block-comment marker instead.

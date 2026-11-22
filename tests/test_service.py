@@ -94,15 +94,15 @@ def test_existing_file_without_anchors_is_rejected(
 def test_request_options_override_the_device_but_omissions_do_not(
     service: GenerationService,
 ) -> None:
-    src = (
-        "## Test Case List\n\n### a case\n\n"
-        "##### Step 1 Deep\n\nbody\n"
-    )
-    # The device says step headings are H4, so H5 yields nothing...
+    src = "## Test Case List\n\n### a case\n\n#### Step 1 Deep\n\nbody\n"
+    # The device reads steps as plain lines, so a step heading yields nothing...
     with pytest.raises(UnprocessableDocumentError):
         service.generate(src, "simple_cpp")
-    # ...until the request overrides just that one field.
-    result = service.generate(src, "simple_cpp", GenerateOptions(step_heading_level=5))
+    # ...until the request overrides just that one field; everything else,
+    # the named section included, still comes from the device.
+    result = service.generate(
+        src, "simple_cpp", GenerateOptions(step_style="heading", step_heading_level=4)
+    )
     assert result.summary.steps == 1
 
 
