@@ -1,122 +1,99 @@
 # TestForge
 
-Generate C++ test code from markdown test plans.
+從 markdown 測試計畫產生 C++ 測試程式碼。
 
 ```
-markdown plan  ->  IR (TestCase/TestStep)  ->  code fragments  ->  assembled C++
+markdown 計畫  ->  IR (TestCase/TestStep)  ->  code fragments  ->  組裝後的 C++
 ```
 
-The two contracts that matter are the **IR** (what a plan means) and the
-**device manifest** (how one target turns that meaning into files). Everything
-else is replaceable.
+真正重要的契約只有兩個：**IR**（一份計畫的語意是什麼）和 **device manifest**（某個目標如何把那個語意變成檔案）。其餘部分都是可替換的。
 
-## Quick start
+## 快速開始
 
 ```bash
 pip install -e '.[dev]'
 
-testforge devices                                     # what can be generated for
-testforge parse examples/sensor_init.md               # what TestForge reads
+testforge devices                                     # 可以為哪些 device 生成
+testforge parse examples/sensor_init.md               # TestForge 讀到了什麼
 testforge generate examples/sensor_init.md \
-    --device example_device --case 1 -o ./out         # write the files
-testforge serve                                       # REST API, docs at /docs
+    --device example_device --case 1 -o ./out         # 寫出檔案
+testforge serve                                       # REST API，文件在 /docs
 ```
 
-Running `generate` into the same `-o` directory again regenerates in place:
-only the regions between the anchor markers are rewritten, so anything you
-wrote by hand around them is kept.
+對同一個 `-o` 目錄再執行一次 `generate` 就是原地重新生成：只有 anchor 標記之間的區塊會被重寫，你在標記外手寫的任何東西都會保留。
 
-## Design rules
+## 設計準則
 
-**Determinism.** The same input produces byte-identical output. No timestamps,
-no random ids in generated code. Golden-file tests depend on it, and so does a
-reviewable `git diff` when generated files are committed.
+**確定性。** 相同的輸入產生 byte 級完全相同的輸出。產生的程式碼裡沒有時間戳、沒有隨機 id。golden file 測試依賴這一點；把產生的檔案 commit 進版控後，能不能看懂 `git diff` 也依賴這一點。
 
-**Diagnostics, not errors.** Plans are written by hand and are reliably messy.
-Recoverable problems come back in a `diagnostics` array with HTTP 200 so the
-author sees every issue at once. Only a plan that yields no usable case is a
-4xx — and its body carries the same `diagnostics` shape, so one rendering path
-handles both. Branch on `code`, never on `message`.
+**用 diagnostics，不要用錯誤。** 測試計畫是人手寫的，一定會髒。可恢復的問題會放在 `diagnostics` 陣列裡隨 HTTP 200 回傳，讓作者一次看到所有問題。只有「完全產生不出任何可用 case」的計畫才回 4xx——而且它的 response body 帶著同樣結構的 `diagnostics`，所以前端一份 render 程式碼就能處理兩種情況。請根據 `code` 判斷，絕對不要根據 `message`。
 
-**Statelessness.** Nothing is stored between requests. To regenerate a file,
-the client sends its current content in `existing_files` and gets it back with
-only the anchored regions rewritten. The state lives with whoever owns the file.
+**無狀態。** 請求之間不保存任何東西。要重新生成某個檔案，客戶端把目前的內容放在 `existing_files` 送上來，拿回只有 anchor 區塊被重寫的版本。狀態留在持有檔案的那一方。
 
-**Layer direction.** `api/` and `web/` both depend on `service`, never on each
-other, and the web layer never re-enters the application over HTTP.
+**分層方向。** `api/` 和 `web/` 都依賴 `service`，彼此互不依賴；web 層絕不透過 HTTP 回頭呼叫自己的 API。
 
-**DTOs are not the IR.** `api/schemas/` is the published contract;
-`core/models.py` is internal and free to grow. `api/mappers.py` is the only
-place that knows both.
+**DTO 不等於 IR。** `api/schemas/` 是對外公布的契約；`core/models.py` 是內部的，可以自由演進。`api/mappers.py` 是唯一同時知道兩邊的地方。
 
-## Layout
+## 專案結構
 
 ```
 src/testforge/
-  core/              pure logic, zero web dependencies
-    models.py        the IR: TestCase, TestStep, CodeFragment, GeneratedArtifact
-    parser.py        markdown -> IR, via markdown-it token stream
-    naming.py        step title -> C++ identifier
-    assembler.py     anchor-based injection
-    templating.py    Jinja2 environment and filters
+  core/              純邏輯，零 web 依賴
+    models.py        IR：TestCase, TestStep, CodeFragment, GeneratedArtifact
+    parser.py        markdown -> IR，走 markdown-it 的 token stream
+    naming.py        步驟標題 -> C++ 識別碼
+    assembler.py     基於 anchor 的程式碼注入
+    templating.py    Jinja2 環境與 filter
   devices/
-    manifest.py      the manifest schema, validated at load time
-    registry.py      discovery and lookup
-    builtin/         devices shipped with the package
-  service.py         GenerationService: the only orchestrator
-  api/               FastAPI: schemas, routers, mappers, error mapping
-  cli.py             a second consumer, which keeps core honest
+    manifest.py      manifest schema，載入時完整驗證
+    registry.py      device 探索與查找
+    builtin/         隨套件發行的 device
+  service.py         GenerationService：唯一的 orchestrator
+  api/               FastAPI：schemas、routers、mappers、錯誤映射
+  cli.py             第二個消費端，用來確保 core 真的與 web 無關
 ```
 
 ## REST API
 
-Base path `/api/v1`. Interactive docs at `/docs`.
+base path 是 `/api/v1`，互動式文件在 `/docs`。
 
-| Method | Path | Purpose |
+| Method | Path | 用途 |
 |---|---|---|
-| GET | `/health` | liveness and device count |
-| GET | `/devices` | list devices |
-| GET | `/devices/{id}` | anchors, naming pattern, output patterns |
-| POST | `/parse` | plan -> IR + diagnostics, no device needed, no code |
-| POST | `/generations` | plan + device -> artifacts |
+| GET | `/health` | 存活狀態與 device 數量 |
+| GET | `/devices` | 列出所有 device |
+| GET | `/devices/{id}` | anchor、命名規則、輸出檔名樣式 |
+| POST | `/parse` | 計畫 -> IR + diagnostics，不需要 device，不產生程式碼 |
+| POST | `/generations` | 計畫 + device -> artifacts |
 
-`/parse` exists separately so a UI can preview steps as they are typed, and so
-format errors surface before a device is even chosen.
+`/parse` 獨立存在，是為了讓 UI 能在使用者邊打字時預覽步驟，也為了讓格式錯誤在還沒選 device 之前就浮現。
 
-`POST /generations` is a plural noun rather than `/generate` because the thing
-being created is a generation. That leaves room to return `202` + polling if a
-compile check is ever added, and to add `GET /generations/{id}` if results are
-ever persisted — without moving the URL.
+`POST /generations` 用的是複數名詞而不是 `/generate`，因為被建立的東西概念上就是一次「generation」。這樣留了兩條後路：日後若加上編譯檢查而變慢，可以改回 `202` + 輪詢；日後若要持久化結果，可以直接加上 `GET /generations/{id}`——兩者都不需要改動 URL。
 
-`generation_id` is a correlation id for logs. Nothing is stored; it cannot be
-fetched.
+`generation_id` 只是給 log 用的 correlation id。系統不保存任何東西，這個 id 無法用來查詢。
 
-### Response representations
+### 回應的表示形式
 
 ```
-POST /api/v1/generations?format=json   application/json  (default)
+POST /api/v1/generations?format=json   application/json  （預設）
 POST /api/v1/generations?format=zip    application/zip   + Content-Disposition
-POST /api/v1/generations?format=file   text/plain        single artifact only
+POST /api/v1/generations?format=file   text/plain        僅限單一 artifact
 ```
 
-A query parameter rather than `Accept` negotiation, because a plain HTML form
-cannot set `Accept`, and this way a form post triggers a browser download with
-no JavaScript at all.
+用 query parameter 而不是 `Accept` 做 content negotiation，是因為一般的 HTML form 沒辦法設定 `Accept`；這樣一個單純的 form post 就能觸發瀏覽器下載，完全不需要 JavaScript。
 
-### Status codes
+### 狀態碼
 
-| Code | Meaning |
+| 狀態碼 | 意義 |
 |---|---|
-| 400 | body does not match the schema, or a bad naming pattern |
-| 404 | unknown `device_id` |
-| 413 | `source` over the size limit |
-| 422 | plan yields no usable case, or `existing_files` is missing anchors |
-| 500 | broken manifest or template — our fault, details are logged not returned |
+| 400 | request body 不符合 schema，或命名 pattern 有誤 |
+| 404 | `device_id` 不存在 |
+| 413 | `source` 超過大小上限 |
+| 422 | 計畫產生不出可用的 case，或 `existing_files` 缺少 anchor |
+| 500 | manifest 或模板有問題——這是我們的錯，細節寫進 log 而不回傳 |
 
-Anchor problems are 422 rather than 409: it is "this input cannot be used", not
-a concurrency conflict a client should retry.
+anchor 的問題回 422 而不是 409：它的本質是「你給的這份輸入我處理不了」，不是客戶端該重試的併發衝突。
 
-Every 4xx/5xx body is the same envelope:
+每一個 4xx / 5xx 的 body 都是同一個 envelope：
 
 ```json
 {
@@ -125,7 +102,7 @@ Every 4xx/5xx body is the same envelope:
 }
 ```
 
-## The plan format
+## 計畫格式
 
 ```markdown
 # Test Case: Sensor Initialization Sequence
@@ -133,7 +110,7 @@ Every 4xx/5xx body is the same envelope:
 - ID: TC-001
 - Device: example_device
 
-Optional prose describing the case.
+這裡可以寫這個 case 的說明文字，可省略。
 
 ## Step 1: Power on the device
 
@@ -142,61 +119,46 @@ Drive the enable line high and wait for the regulator to settle.
 **Expected:** The READY flag is asserted within 500 ms.
 ```
 
-* `# Test Case: <title>` starts a case; several per document is fine, and each
-  produces its own artifacts.
-* A bullet list directly under the heading is metadata (`Key: Value`).
-* `## Step N: <title>` starts a step. Both `Step` and the number are optional;
-  steps are indexed by position, and a mismatch raises
-  `step.index_mismatch` rather than renumbering silently.
-* `Expected:`, `**Expected:**`, `Expected result:` and `預期結果：` all open an
-  expectation paragraph.
-* Step bodies keep their raw markdown, fenced code blocks included. A `#`
-  inside a fence is never mistaken for a heading.
+* `# Test Case: <標題>` 開始一個 case；一份文件裡放多個是沒問題的，每個 case 產生自己的 artifacts。
+* 緊接在 case 標題下的 bullet list 是 metadata（`Key: Value`）。
+* `## Step N: <標題>` 開始一個步驟。`Step` 和數字都可以省略；步驟一律以**出現位置**編號，寫在標題裡的數字若與位置不符會發出 `step.index_mismatch`，而不是默默重新編號。
+* `Expected:`、`**Expected:**`、`Expected result:` 和 `預期結果：` 都能開啟一段預期結果。
+* 步驟正文保留原始 markdown，包含 fenced code block。fence 裡面的 `#` 絕不會被誤認成標題。
 
-Heading levels are configurable per device, so a team can keep its existing
-layout instead of rewriting its plans.
+標題層級可以在每個 device 裡設定，所以團隊可以沿用既有的計畫排版，不必重寫文件。
 
-## Adding a device
+## 新增一個 device
 
-Copy `src/testforge/devices/builtin/example_device/` and edit it. No Python
-changes. Devices are also picked up from `./devices/` and from
-`TESTFORGE_DEVICE_PATH`; a later root shadows an earlier one, so a project can
-override a builtin device.
+複製 `src/testforge/devices/builtin/example_device/` 然後修改即可，不需要改任何 Python。device 也會從 `./devices/` 和 `TESTFORGE_DEVICE_PATH` 載入；後面的搜尋根目錄會覆蓋前面的，所以專案可以用自己的版本蓋掉內建 device。
 
 ```
 my_device/
   manifest.yaml
   templates/
-    test_case.h.j2       # skeleton, carries the anchor markers
+    test_case.h.j2       # 骨架，負責攜帶 anchor 標記
     test_case.cpp.j2
-    step_decls.cpp.j2    # fragment rendered into one anchor
+    step_decls.cpp.j2    # fragment，被渲染進某一個 anchor
     step_calls.cpp.j2
     step_defs.cpp.j2
 ```
 
-The manifest declares the anchor spelling, the naming pattern, and which
-fragment fills which anchor in which file. `example_device/manifest.yaml`
-documents the full template context inline. Every manifest is validated when
-the registry loads, so a typo stops the service from starting rather than
-failing someone's first request.
+manifest 宣告 anchor 的寫法、命名規則，以及「哪個 fragment 填進哪個檔案的哪個 anchor」。`example_device/manifest.yaml` 的開頭以註解完整記錄了可用的模板 context。每份 manifest 都在 registry 載入時驗證，所以打錯字會讓服務起不來，而不是等到某個人的第一個請求才失敗。
 
-`example_device/support/testforge_runtime.h` is a reference runtime, not part of
-generation. It exists so the generated code compiles and runs as-is:
+`example_device/support/testforge_runtime.h` 是一份參考 runtime，不參與生成。它存在的理由是讓產生的程式碼可以直接編譯並執行：
 
 ```bash
-testforge generate examples/sensor_init.md -d example_device --case 1 -o /tmp/tf
+testforge generate examples/sensor_init.md --device example_device --case 1 -o /tmp/tf
 cp src/testforge/devices/builtin/example_device/support/testforge_runtime.h /tmp/tf
-# add a main() that calls example_device::RunSensorInitializationSequence(ctx)
+cd /tmp/tf
+# 再補一個 main()，呼叫 example_device::RunSensorInitializationSequence(ctx)
 g++ -std=c++17 -Wall -Wextra -Werror -o runner main.cpp test_*.cpp
 ```
 
-## Tests
+## 測試
 
 ```bash
-pytest                                              # all of it
-UPDATE_GOLDEN=1 pytest tests/test_golden.py         # accept template changes
+pytest                                              # 全部
+UPDATE_GOLDEN=1 pytest tests/test_golden.py         # 接受模板的變更
 ```
 
-Three layers: unit tests for the edge cases (naming, parsing, anchors), golden
-files for what a user actually receives, and API tests for the contract —
-status codes, the error envelope, and the regeneration round trip.
+三個層次：單元測試負責邊界情況（命名、解析、anchor），golden file 負責使用者實際拿到的東西，API 測試負責契約——狀態碼、error envelope，以及重新生成的 round trip。
