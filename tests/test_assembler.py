@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from testforge.core.assembler import find_anchor_regions, inject
+from testforge.core.assembler import detect_newline, find_anchor_regions, inject
 from testforge.core.errors import (
     AnchorDuplicateError,
     AnchorMissingError,
@@ -89,3 +89,40 @@ def test_duplicate_anchor_raises() -> None:
     )
     with pytest.raises(AnchorDuplicateError):
         inject(content, {"CALLS": "a();"}, STYLE)
+
+
+# -- line endings -----------------------------------------------------------
+#
+# Generated files get committed. Rewriting a CRLF file with LF endings would
+# report every line as changed in the next diff, which defeats the point of
+# regenerating in place. These matter most on Windows, where CRLF is the norm.
+
+
+def test_detect_newline() -> None:
+    assert detect_newline("a\r\nb\r\n") == "\r\n"
+    assert detect_newline("a\nb\n") == "\n"
+    assert detect_newline("") == "\n"
+    # A few stray endings must not flip the whole file.
+    assert detect_newline("a\r\nb\r\nc\n") == "\r\n"
+    assert detect_newline("a\nb\nc\r\n") == "\n"
+
+
+def test_crlf_file_keeps_crlf() -> None:
+    crlf = FILE.replace("\n", "\r\n")
+    out, _ = inject(crlf, {"CALLS": "a();", "DEFS": "void a() {}"}, STYLE)
+    assert "\r\n" in out
+    # No mixture: every LF is part of a CRLF pair.
+    assert out.count("\n") == out.count("\r\n")
+
+
+def test_lf_file_keeps_lf() -> None:
+    out, _ = inject(FILE, {"CALLS": "a();", "DEFS": "void a() {}"}, STYLE)
+    assert "\r" not in out
+
+
+def test_crlf_regeneration_is_idempotent() -> None:
+    crlf = FILE.replace("\n", "\r\n")
+    fragments = {"CALLS": "a();", "DEFS": "void a() {}"}
+    once, _ = inject(crlf, fragments, STYLE)
+    twice, _ = inject(once, fragments, STYLE)
+    assert once == twice

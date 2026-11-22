@@ -101,6 +101,28 @@ are missing.
 - **WHEN** a file contains two marker pairs for the same anchor
 - **THEN** assembly fails with a duplicate-anchor error
 
+### Requirement: An existing file keeps its line endings
+
+Rewriting a file SHALL preserve the line ending it already uses, and SHALL NOT
+leave a file with a mixture. A file created from a template has no existing
+ending to honour and uses the template's.
+
+#### Scenario: CRLF file stays CRLF
+
+- **WHEN** a file using CRLF endings is regenerated
+- **THEN** the result still uses CRLF throughout
+- **AND** regenerating it again produces byte-identical content
+
+#### Scenario: LF file stays LF
+
+- **WHEN** a file using LF endings is regenerated
+- **THEN** no carriage returns are introduced
+
+#### Scenario: Stray endings do not flip the file
+
+- **WHEN** a predominantly CRLF file contains a few LF-only lines
+- **THEN** the whole result uses CRLF rather than propagating the mixture
+
 ### Requirement: Generation is deterministic
 
 Identical input SHALL produce byte-identical output. Generated code SHALL NOT

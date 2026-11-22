@@ -20,6 +20,27 @@ from testforge.service import GenerationService
 _SEVERITY_COLOR = {"error": "red", "warning": "yellow", "info": "cyan"}
 
 
+def _read_verbatim(path: Path) -> str:
+    """Read a generated file without touching its line endings.
+
+    Text mode applies universal newlines, which on Windows would turn a CRLF
+    file into LF before the assembler ever sees it, so the file's own ending
+    could not be preserved.
+    """
+    with open(path, encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
+def _write_verbatim(path: Path, content: str) -> None:
+    """Write exactly what was generated.
+
+    newline="" disables the translation that would otherwise turn the CRLF
+    the assembler just preserved into CR CR LF on Windows.
+    """
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        handle.write(content)
+
+
 def _service() -> GenerationService:
     return GenerationService(DeviceRegistry.from_roots())
 
@@ -111,9 +132,7 @@ def generate(
 
         for path in sorted(out.iterdir()):
             if path.is_file():
-                existing.append(
-                    ExistingFile(path=path.name, content=path.read_text(encoding="utf-8"))
-                )
+                existing.append(ExistingFile(path=path.name, content=_read_verbatim(path)))
 
     result = service.generate(plan.read_text(encoding="utf-8"), device_id, options, existing)
 
@@ -124,7 +143,7 @@ def generate(
     else:
         out.mkdir(parents=True, exist_ok=True)
         for artifact in result.artifacts:
-            (out / artifact.path).write_text(artifact.content, encoding="utf-8")
+            _write_verbatim(out / artifact.path, artifact.content)
             click.echo(f"{artifact.mode:>7}  {out / artifact.path}")
 
     click.secho(

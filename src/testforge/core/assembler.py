@@ -21,6 +21,19 @@ from testforge.devices.manifest import AnchorStyle
 _INDENT_RE = re.compile(r"^[ \t]*")
 
 
+def detect_newline(content: str) -> str:
+    """The line ending the file already uses.
+
+    Generated files get committed, so rewriting a CRLF file with LF endings
+    would show every line as changed in the next diff. The dominant ending
+    wins, which keeps a file with a few stray endings consistent instead of
+    propagating the mixture.
+    """
+    crlf = content.count("\r\n")
+    lf = content.count("\n") - crlf
+    return "\r\n" if crlf > lf else "\n"
+
+
 @dataclass(frozen=True)
 class AnchorRegion:
     name: str
@@ -108,6 +121,7 @@ def inject(
             },
         )
 
+    newline = detect_newline(content)
     lines = content.splitlines()
     # Bottom-up so earlier replacements do not shift later line indices.
     for name in sorted(names, key=lambda n: regions[n].begin_line, reverse=True):
@@ -115,9 +129,9 @@ def inject(
         body = _indented_body(fragments[name], region.indent)
         lines[region.begin_line + 1 : region.end_line] = body
 
-    assembled = "\n".join(lines)
-    if content.endswith("\n") and not assembled.endswith("\n"):
-        assembled += "\n"
+    assembled = newline.join(lines)
+    if content.endswith(("\n", "\r")) and not assembled.endswith(newline):
+        assembled += newline
     filled = tuple(sorted(names, key=lambda n: regions[n].begin_line))
     return assembled, filled
 

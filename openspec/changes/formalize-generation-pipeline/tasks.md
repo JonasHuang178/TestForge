@@ -23,6 +23,7 @@ have no test. Each task adds the missing test and states the assertion.
 - [ ] 2.2 Add a test for the step-naming scenario "Same title in a different case", asserting two cases may each produce the identical identifier with no `naming.duplicate` diagnostic; verify `pytest tests/test_naming.py` passes
 - [ ] 2.3 Add a test for the device-templates scenario "Project device shadows a packaged one", using a temporary directory as a later search root; verify `pytest tests/test_devices.py` passes
 - [ ] 2.4 Add a test for the device-templates scenario "Reference device generates compilable code" that compiles the generated output with the bundled runtime under `-Wall -Wextra -Werror` and asserts a non-zero run exit code, skipped when no compiler is present; verify it passes locally and skips cleanly when `CXX` is unavailable
+- [x] 2.7 Preserve the existing file's line endings on regeneration, with tests for CRLF, LF and mixed input; verify `pytest tests/test_assembler.py` passes (found while checking Windows behaviour: a CRLF file was being rewritten as LF, reporting every line as changed in the next diff)
 - [ ] 2.5 Add a test for the generation-api scenario "Server fault withholds internals", asserting a 5xx body carries no `details` content; verify `pytest tests/test_api.py` passes
 - [ ] 2.6 Run the full suite and confirm no regression; verify `pytest` reports zero failures and a test count greater than the 80 recorded in the proposal
 

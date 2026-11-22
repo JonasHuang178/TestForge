@@ -10,13 +10,39 @@ markdown 計畫  ->  IR (TestCase/TestStep)  ->  code fragments  ->  組裝後�
 
 ## 快速開始
 
-```bash
-pip install -e '.[dev]'
+需要 Python 3.11 以上。
 
-testforge serve                                       # 開啟 web 介面
+**macOS / Linux**
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'
+testforge serve
 ```
 
+**Windows（PowerShell）**
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+testforge serve
+```
+
+若 PowerShell 擋下啟用指令稿，先執行一次
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned`。
+cmd.exe 的啟用指令是 `.venv\Scripts\activate.bat`。
+
 然後瀏覽器開 **http://127.0.0.1:8000/**。這是給使用者操作的頁面：貼上計畫、即時看到解析結果、產生程式碼、下載。
+
+不想安裝也可以，只要相依套件在就能直接跑原始碼：
+
+```bash
+PYTHONPATH=src python3 -m uvicorn testforge.api.app:app     # macOS / Linux
+```
+```powershell
+$env:PYTHONPATH = "src"; py -m uvicorn testforge.api.app:app  # Windows
+```
 
 命令列同樣能做完整流程：
 
@@ -31,7 +57,7 @@ testforge generate examples/sensor_init.md \
 
 ## 設計準則
 
-**確定性。** 相同的輸入產生 byte 級完全相同的輸出。產生的程式碼裡沒有時間戳、沒有隨機 id。golden file 測試依賴這一點；把產生的檔案 commit 進版控後，能不能看懂 `git diff` 也依賴這一點。
+**確定性。** 相同的輸入產生 byte 級完全相同的輸出。產生的程式碼裡沒有時間戳、沒有隨機 id。golden file 測試依賴這一點；把產生的檔案 commit 進版控後，能不能看懂 `git diff` 也依賴這一點。重新生成時也會**保留檔案原有的換行字元**——否則 Windows 上的 CRLF 檔案每次都會被改成 LF，diff 顯示整檔都變了。
 
 **用 diagnostics，不要用錯誤。** 測試計畫是人手寫的，一定會髒。可恢復的問題會放在 `diagnostics` 陣列裡隨 HTTP 200 回傳，讓作者一次看到所有問題。只有「完全產生不出任何可用 case」的計畫才回 4xx——而且它的 response body 帶著同樣結構的 `diagnostics`，所以前端一份 render 程式碼就能處理兩種情況。請根據 `code` 判斷，絕對不要根據 `message`。
 
