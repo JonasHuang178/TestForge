@@ -137,6 +137,24 @@ MINIMAL = '''
         return [output("out.cpp", "t.cpp", {{"BODY": "// x"}})]
 '''
 
+CONSOLE_PLAN = textwrap.dedent(
+    """\
+    ## Test Case List
+
+    ### print all info
+
+    #### Step 1 Print the build version
+
+    Call the version helper.
+
+    ### check sensors
+
+    #### Step 1 Read the temperature
+
+    Poll the sensor once.
+    """
+)
+
 TEMPLATE = "// === TESTFORGE:BODY:BEGIN ===\n// === TESTFORGE:BODY:END ===\n"
 
 
@@ -216,3 +234,101 @@ def test_step_function_name_returning_nothing_is_reported(tmp_path: Path) -> Non
     service = GenerationService(DeviceRegistry.from_roots([tmp_path]))
     with pytest.raises(TemplateRenderError, match="non-empty string"):
         service.generate(PLAN, "d1")
+
+
+# -- the whole-plan device --------------------------------------------------
+
+
+def test_simple_cpp_puts_every_case_in_one_file(demo_service: GenerationService) -> None:
+    result = demo_service.generate(CONSOLE_PLAN, "simple_cpp")
+    assert [a.path for a in result.artifacts] == ["test_main.cpp"]
+    content = result.artifacts[0].content
+    # Both cases survive: build(case) would have had the second overwrite the
+    # first, which is why this device defines build_all(cases).
+    assert "int printAllInfo()" in content
+    assert "int checkSensors()" in content
+    assert content.count("return 0;") == 3  # one per case, plus main's
+
+
+def test_simple_cpp_calls_each_case_from_main(demo_service: GenerationService) -> None:
+    content = demo_service.generate(CONSOLE_PLAN, "simple_cpp").artifacts[0].content
+    main_body = content.split("int main()", 1)[1]
+    assert "printAllInfo();" in main_body
+    assert "checkSensors();" in main_body
+
+
+def test_simple_cpp_inserts_anchors_into_a_plain_template(
+    demo_service: GenerationService,
+) -> None:
+    # The device's own main.cpp carries no markers; the module adds them.
+    template = (DEMO_ROOT / "simple_cpp" / "main.cpp").read_text(encoding="utf-8")
+    assert "TESTFORGE" not in template
+
+    content = demo_service.generate(CONSOLE_PLAN, "simple_cpp").artifacts[0].content
+    assert "// === TESTFORGE:TEST_CASES:BEGIN ===" in content
+    assert "// === TESTFORGE:CALLS:BEGIN ===" in content
+
+
+def test_cases_outside_the_named_section_are_ignored(
+    demo_service: GenerationService,
+) -> None:
+    plan = (
+        "## Environment\n\n### Hardware\n\nNot a case.\n\n"
+        "## Test Case List\n\n### real case\n\n#### Step 1 Do it\n\nbody\n"
+    )
+    result = demo_service.generate(plan, "simple_cpp")
+    assert result.summary.cases == 1
+    assert "int realCase()" in result.artifacts[0].content
+    assert "hardware" not in result.artifacts[0].content.lower()
+
+
+def test_whole_plan_regeneration_keeps_hand_written_code(
+    demo_service: GenerationService,
+) -> None:
+    first = demo_service.generate(CONSOLE_PLAN, "simple_cpp").artifacts[0]
+    edited = ExistingFile(
+        path=first.path,
+        content=first.content.replace(
+            "#include <iostream>", "#include <iostream>\n#include <vector>"
+        ),
+    )
+    second = demo_service.generate(
+        CONSOLE_PLAN, "simple_cpp", existing_files=[edited]
+    ).artifacts[0]
+    assert second.mode == "updated"
+    assert "#include <vector>" in second.content
+    assert second.content == edited.content  # nothing else moved
+
+
+def test_module_defining_neither_entry_point_fails(tmp_path: Path) -> None:
+    _write_device(
+        tmp_path,
+        "d1",
+        '''
+        ID = "d1"
+        NAME = "D1"
+        def step_function_name(step):
+            return "x"
+        ''',
+    )
+    with pytest.raises(DeviceDefinitionError, match="build_all"):
+        load_python_device(tmp_path / "d1")
+
+
+def test_module_defining_both_entry_points_fails(tmp_path: Path) -> None:
+    _write_device(
+        tmp_path,
+        "d1",
+        '''
+        ID = "d1"
+        NAME = "D1"
+        def step_function_name(step):
+            return "x"
+        def build(case):
+            return []
+        def build_all(cases):
+            return []
+        ''',
+    )
+    with pytest.raises(DeviceDefinitionError, match="exactly one"):
+        load_python_device(tmp_path / "d1")

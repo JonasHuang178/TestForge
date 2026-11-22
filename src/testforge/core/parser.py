@@ -18,9 +18,15 @@ from testforge.core.diagnostics import DiagnosticCollector
 from testforge.core.models import ParseResult, TestCase, TestStep
 from testforge.core.options import ParseOptions
 
-#: `## Step 3: Title`, `## 3. Title`, `## Step 3 - Title`, `## 步驟 3：Title`
+#: Two spellings, kept separate on purpose.
+#:
+#: With the word "Step" the number may be followed by nothing but a space
+#: (`Step 1 Print the version`). Without it, an explicit separator is required
+#: (`3. Title`), because a bare leading number otherwise swallows titles such
+#: as "2024 annual check".
 _STEP_TITLE_RE = re.compile(
-    r"^\s*(?:step|steps|步驟|步骤)?\s*(\d+)\s*[:.)\-–—：]\s*(.*)$",
+    r"^\s*(?:(?:step|steps|步驟|步骤)\s*(\d+)\s*(?:[:.)\-–—：]\s*|\s+|$)"
+    r"|(\d+)\s*[:.)\-–—：]\s*)(.*)$",
     re.IGNORECASE,
 )
 
@@ -82,10 +88,25 @@ class MarkdownTestPlanParser:
         lines = source.splitlines()
         headings = self._headings(source, lines)
 
+        scan_from, scan_to = 0, len(lines)
+        if opts.case_section is not None:
+            bounds = self._section_bounds(headings, opts, len(lines))
+            if bounds is None:
+                level = opts.section_heading_level or max(1, opts.case_heading_level - 1)
+                diag.error(
+                    "document.section_not_found",
+                    f"No level-{level} heading titled {opts.case_section!r} was "
+                    f"found, so there is nowhere to look for test cases.",
+                )
+                return ParseResult(cases=(), diagnostics=tuple(diag.items))
+            scan_from, scan_to = bounds
+
         case_headings = [
             h
             for h in headings
-            if h.level == opts.case_heading_level and self._is_case_heading(h.text, opts)
+            if scan_from <= h.line < scan_to
+            and h.level == opts.case_heading_level
+            and self._is_case_heading(h.text, opts)
         ]
 
         if not case_headings:
@@ -102,7 +123,12 @@ class MarkdownTestPlanParser:
             return ParseResult(cases=(), diagnostics=tuple(diag.items))
 
         first_case_line = case_headings[0].line
-        if any(h.line < first_case_line and h.level >= opts.case_heading_level for h in headings):
+        # Pointless when a section is configured: content before the section is
+        # exactly what `case_section` exists to allow.
+        if opts.case_section is None and any(
+            h.line < first_case_line and h.level >= opts.case_heading_level
+            for h in headings
+        ):
             diag.warning(
                 "document.content_before_case",
                 "Headings appear before the first test case heading; they are "
@@ -113,7 +139,10 @@ class MarkdownTestPlanParser:
         cases: list[TestCase] = []
         seen_titles: dict[str, int] = {}
         for ordinal, heading in enumerate(case_headings, start=1):
-            end = self._next_boundary(headings, heading, opts.case_heading_level, len(lines))
+            end = min(
+                self._next_boundary(headings, heading, opts.case_heading_level, len(lines)),
+                scan_to,
+            )
             case = self._build_case(ordinal, heading, end, lines, headings, opts, diag)
             if not case.steps:
                 diag.warning(
@@ -162,6 +191,24 @@ class MarkdownTestPlanParser:
             body_start = token.map[1] if token.map[1] > start else start + 1
             headings.append(_Heading(level=level, text=text, line=start, body_start=body_start))
         return headings
+
+    @staticmethod
+    def _section_bounds(
+        headings: list[_Heading], opts: ParseOptions, eof: int
+    ) -> tuple[int, int] | None:
+        """Line range (0-based, end exclusive) of the section holding the cases."""
+        level = opts.section_heading_level or max(1, opts.case_heading_level - 1)
+        wanted = opts.case_section.strip().casefold()
+        for i, heading in enumerate(headings):
+            if heading.level != level or heading.text.strip().casefold() != wanted:
+                continue
+            end = eof
+            for later in headings[i + 1 :]:
+                if later.level <= level:
+                    end = later.line
+                    break
+            return heading.body_start, end
+        return None
 
     @staticmethod
     def _is_case_heading(text: str, opts: ParseOptions) -> bool:
@@ -283,8 +330,8 @@ class MarkdownTestPlanParser:
         title = heading.text
         match = _STEP_TITLE_RE.match(heading.text)
         if match:
-            declared_index = int(match.group(1))
-            title = match.group(2).strip() or heading.text.strip()
+            declared_index = int(match.group(1) or match.group(2))
+            title = match.group(3).strip() or heading.text.strip()
 
         if declared_index is not None and declared_index != position:
             diag.warning(

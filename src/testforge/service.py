@@ -100,12 +100,23 @@ class GenerationService:
         functions: list[str] = []
         seen_paths: dict[str, int] = {}
 
-        for case in cases:
-            case_artifacts, case_functions = self._generate_case(
-                device, case, existing, diag, seen_paths
+        infos = [device.case_info(case) for case in cases]
+        functions = [s.function_name for info in infos for s in info.steps]
+
+        if device.builds_whole_plan:
+            # One call with every case, so a device that writes them all into
+            # one file can emit them together instead of each overwriting the
+            # last.
+            artifacts = self._write(
+                device, device.build_plan(infos), existing, diag, seen_paths, case=None
             )
-            artifacts.extend(case_artifacts)
-            functions.extend(case_functions)
+        else:
+            for case, info in zip(cases, infos):
+                artifacts.extend(
+                    self._write(
+                        device, device.build(info), existing, diag, seen_paths, case=case
+                    )
+                )
 
         return GenerationResult(
             generation_id=f"gen_{uuid.uuid4().hex[:24]}",
@@ -121,35 +132,36 @@ class GenerationService:
 
     # -- internals ---------------------------------------------------------
 
-    def _generate_case(
-        self,
+    @staticmethod
+    def _write(
         device: PythonDevice,
-        case: TestCase,
+        outputs: list,
         existing: dict[str, str],
         diag: DiagnosticCollector,
         seen_paths: dict[str, int],
-    ) -> tuple[list[GeneratedArtifact], list[str]]:
-        """Build one case.
+        case: TestCase | None,
+    ) -> list[GeneratedArtifact]:
+        """Turn a device's outputs into artifacts.
 
-        The device decides the filenames, the function names and the code. The
-        framework owns anchor injection, so idempotent regeneration and
-        line-ending preservation hold whatever the device's module does.
+        The device decided the filenames and the code; this owns the part that
+        must behave the same for every device — injecting into the anchors of
+        either the supplied file or the device's skeleton.
         """
-        info = device.case_info(case)
-        outputs = device.build(info)
-
         artifacts: list[GeneratedArtifact] = []
         for spec in outputs:
             path = spec.path
-            if path in seen_paths:
+            if case is not None and path in seen_paths:
                 diag.warning(
                     "output.path_collision",
                     f"Case {case.index} writes {path!r}, which case "
-                    f"{seen_paths[path]} already produced; the later one wins.",
+                    f"{seen_paths[path]} already produced; the later one wins. "
+                    f"A device whose cases share a file should define "
+                    f"build_all(cases) instead of build(case).",
                     line=case.source_line,
                     case_index=case.index,
                 )
-            seen_paths[path] = case.index
+            if case is not None:
+                seen_paths[path] = case.index
 
             base = existing.get(path)
             mode = "updated" if base is not None else "created"
@@ -162,8 +174,7 @@ class GenerationService:
                     path=path, content=content, mode=mode, anchors_filled=filled
                 )
             )
-
-        return artifacts, [s.function_name for s in info.steps]
+        return artifacts
 
     @staticmethod
     def _merge_parse_options(

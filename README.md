@@ -154,28 +154,39 @@ anchor 的問題回 422 而不是 409：它的本質是「你給的這份輸入�
 
 ## 計畫格式
 
+標題層級與 case 所在的區段都由 device 決定，所以你的團隊不必改既有的文件排版。以下是 `simple_cpp` 預期的格式：
+
 ```markdown
-# Test Case: Sensor Initialization Sequence
+# Console App Test Plan
 
-- ID: TC-001
-- Device: example_device
+## Purpose
 
-這裡可以寫這個 case 的說明文字，可省略。
+這一段不會被讀取，修訂紀錄、環境說明都可以安心放這裡。
 
-## Step 1: Power on the device
+## Test Case List
 
-Drive the enable line high and wait for the regulator to settle.
+### print all info
 
-**Expected:** The READY flag is asserted within 500 ms.
+#### Step 1 Print the build version
+
+Call the version helper and write it to stdout.
+
+**Expected:** A non-empty version string is printed.
+
+#### Step 2 Print the device id
+
+Read the id from EEPROM.
 ```
 
-* `# Test Case: <標題>` 開始一個 case；一份文件裡放多個是沒問題的，每個 case 產生自己的 artifacts。
+* **`## Test Case List`** 是裝 case 的區段。device 用 `CASE_SECTION` 指定它之後，**只有這個區段裡面**的標題會被當成 test case——上面的 `## Purpose`、`## Environment` 連同它們的子標題都會被忽略。不設定 `CASE_SECTION` 的話，整份文件都會被掃描。
+* **`### <名稱>`** 開始一個 test case（層級由 `CASE_HEADING_LEVEL` 決定）。
+* **`#### Step N <標題>`** 開始一個步驟（層級由 `STEP_HEADING_LEVEL` 決定）。數字後面接空格或 `:`、`.`、`-` 都可以。有 `Step` 這個字時數字後面只有空格也行；沒有 `Step` 時必須有分隔符號，否則像「2024 annual check」這種標題會被誤判成第 2024 步。
+* 步驟一律以**出現位置**編號。標題裡寫的數字若與位置不符會發出 `step.index_mismatch`，不會默默重新編號。
+* `**Expected:**`、`Expected:`、`Expected result:`、`預期結果：` 都能開啟一段預期結果。
 * 緊接在 case 標題下的 bullet list 是 metadata（`Key: Value`）。
-* `## Step N: <標題>` 開始一個步驟。`Step` 和數字都可以省略；步驟一律以**出現位置**編號，寫在標題裡的數字若與位置不符會發出 `step.index_mismatch`，而不是默默重新編號。
-* `Expected:`、`**Expected:**`、`Expected result:` 和 `預期結果：` 都能開啟一段預期結果。
-* 步驟正文保留原始 markdown，包含 fenced code block。fence 裡面的 `#` 絕不會被誤認成標題。
+* 步驟正文保留原始 markdown，包含 fenced code block。fence 裡的 `#` 絕不會被誤認成標題。
 
-標題層級可以在每個 device 裡設定，所以團隊可以沿用既有的計畫排版，不必重寫文件。
+`demo_board` 用的是另一組設定（`#` 當 case、`##` 當步驟、不限定區段），示範同一個解析器如何服務不同的文件慣例。
 
 ## 新增一個 device
 
@@ -183,10 +194,10 @@ Drive the enable line high and wait for the regulator to settle.
 
 ```
 devices/
-  simple_cpp/                 # 最小範例：一個 case 產生一個獨立的 .cpp
+  simple_cpp/                 # 整份計畫產生一個 .cpp
     device.py
-    test_case.cpp
-  demo_board/                 # 較完整：header + source
+    main.cpp                  # 你的真實模板，不含任何標記
+  demo_board/                 # 每個 case 產生 header + source
     device.py
     test_case.h
     test_case.cpp
@@ -195,7 +206,7 @@ devices/
     ...
 ```
 
-從 `devices/simple_cpp/` 開始最容易——它只產生一個檔案、自帶 `main()`、編譯後能直接執行。要 header 與 source 分開就看 `devices/demo_board/`。複製一份改名就能開始。資料夾名稱必須和 `device.py` 裡的 `ID` 一致。TestForge 會從套件內建的 device、專案根目錄的 `./devices/`，以及 `TESTFORGE_DEVICE_PATH` 載入；後面的會蓋掉前面同名的。
+從 `devices/simple_cpp/` 開始最容易——它的模板就是一份乾淨的 `main.cpp`，沒有任何 TestForge 標記，`device.py` 自己在正確位置插入。複製一份改名就能開始。資料夾名稱必須和 `device.py` 裡的 `ID` 一致。TestForge 會從套件內建的 device、專案根目錄的 `./devices/`，以及 `TESTFORGE_DEVICE_PATH` 載入；後面的會蓋掉前面同名的。
 
 ### device.py 的契約
 
@@ -209,15 +220,19 @@ def step_function_name(step):
     """一個步驟 -> 一個 C 函式名稱。這就是你的命名規則。"""
     return identifier(f"TestStep_{step.index:02d}_{pascal(step.title)}")
 
+# 以下兩者**擇一**
 def build(case):
-    """回傳這個 test case 要產生哪些檔案。"""
-    return [
-        output("test_x.h",   template="test_case.h",   anchors={...}, GUARD="..."),
-        output("test_x.cpp", template="test_case.cpp", anchors={...}),
-    ]
+    """每個 case 產生自己的檔案時用這個。"""
+    return [output("test_x.cpp", template="test_case.cpp", anchors={...})]
+
+def build_all(cases):
+    """所有 case 寫進同一個檔案時用這個。"""
+    return [output("test_main.cpp", content=..., anchors={...})]
 ```
 
-可選的有 `DESCRIPTION`、`VERSION`、`STEP_HEADING_LEVEL`、`CASE_HEADING_LEVEL`。
+`build` 和 `build_all` **必須且只能定義一個**，載入時會檢查。選錯會壞：若所有 case 共用一個檔案卻用 `build(case)`，每個 case 都會覆寫同一塊 anchor 區域，只有最後一個留下來。
+
+可選的有 `DESCRIPTION`、`VERSION`、`CASE_HEADING_LEVEL`、`STEP_HEADING_LEVEL`、`CASE_SECTION`、`SECTION_HEADING_LEVEL`、`ANCHOR_BEGIN`、`ANCHOR_END`。
 
 `output()` 的三個部分：
 
@@ -225,6 +240,7 @@ def build(case):
 |---|---|
 | `path` | 要產生的檔名，由你從 `case` 算出來 |
 | `template` | 同資料夾下的範本檔，**只在輸出檔還不存在時**使用 |
+| `content` | 直接給定骨架內容，取代 `template`。模板沒有 anchor 標記、需要由 `device.py` 自己插入時用這個 |
 | `anchors` | anchor 名稱 -> 要放進該區塊的程式碼 |
 | `**variables` | 範本裡的 `@@NAME@@` placeholder，只在建立時替換 |
 
@@ -252,15 +268,27 @@ ANCHOR_BEGIN = "/* === TESTFORGE:{name}:BEGIN === */"
 ANCHOR_END   = "/* === TESTFORGE:{name}:END === */"
 ```
 
+### 模板不含標記時
+
+`simple_cpp/main.cpp` 是一份乾淨的檔案：
+
+```cpp
+#include <iostream>
+
+int main()
+{
+    return 0;
+}
+```
+
+`device.py` 在建立輸出檔時自己插入兩組標記——一組放在 `int main` 之前（test case 函式進這裡），一組放在 `main` 裡面（呼叫進這裡）。這樣這份 `main.cpp` 仍然是一個可以打開、可以編譯、可以單獨理解的檔案，而不是一份佈滿註解標記的樣板。
+
 ### 試一下
 
 ```bash
-# 最小範例：產出一個可直接編譯執行的檔案
-testforge generate examples/simple_plan.md --device simple_cpp -o ./out
-cd out && g++ -std=c++17 -Wall -Wextra -Werror -o runner test_button_press.cpp && ./runner
+testforge generate examples/console_plan.md --device simple_cpp -o ./out
+cd out && g++ -std=c++17 -Wall -Wextra -Werror -o runner test_main.cpp && ./runner
 ```
-
-exit code 是 1、每步都 FAIL 才正確：步驟都還是未實作的 TODO，而未實作的測試應該是紅的。
 
 ## 測試
 

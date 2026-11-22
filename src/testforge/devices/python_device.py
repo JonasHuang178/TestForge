@@ -29,7 +29,7 @@ DEVICE_MODULE = "device.py"
 #: C or C++ syntax, unlike braces.
 _VARIABLE_RE = re.compile(r"@@([A-Z][A-Z0-9_]*)@@")
 
-_REQUIRED = ("ID", "NAME", "step_function_name", "build")
+_REQUIRED = ("ID", "NAME", "step_function_name")
 
 
 @dataclass(frozen=True)
@@ -53,9 +53,12 @@ class PythonDevice:
         self.name: str = module.NAME
         self.description: str = getattr(module, "DESCRIPTION", "")
         self.version: int = int(getattr(module, "VERSION", 1))
+        section_level = getattr(module, "SECTION_HEADING_LEVEL", None)
         self.parse_options = ParseOptions(
             case_heading_level=int(getattr(module, "CASE_HEADING_LEVEL", 1)),
             step_heading_level=int(getattr(module, "STEP_HEADING_LEVEL", 2)),
+            case_section=getattr(module, "CASE_SECTION", None),
+            section_heading_level=int(section_level) if section_level else None,
         )
         # A device emitting C89, where // is not a comment, can declare a
         # block-comment marker instead.
@@ -67,6 +70,16 @@ class PythonDevice:
     @property
     def directory(self) -> Path:
         return self._directory
+
+    @property
+    def builds_whole_plan(self) -> bool:
+        """True when the module writes every case into the same file(s).
+
+        Such a device defines ``build_all(cases)`` and is called once with the
+        whole plan; the per-case ``build(case)`` cannot express it, because a
+        later case would overwrite the anchored region an earlier one filled.
+        """
+        return hasattr(self._module, "build_all")
 
     # -- generation --------------------------------------------------------
 
@@ -121,18 +134,32 @@ class PythonDevice:
         )
 
     def build(self, info: CaseInfo) -> list[ResolvedOutput]:
+        """One case -> its files. For a device that defines ``build``."""
+        return self._invoke(
+            self._module.build,
+            (info,),
+            "build",
+            f"case {info.index} ({info.title!r})",
+        )
+
+    def build_plan(self, infos: list[CaseInfo]) -> list[ResolvedOutput]:
+        """Every case -> the files holding them all. For ``build_all``."""
+        return self._invoke(
+            self._module.build_all, (tuple(infos),), "build_all", "the plan"
+        )
+
+    def _invoke(self, func, args, name: str, what: str) -> list[ResolvedOutput]:
         try:
-            produced = self._module.build(info)
+            produced = func(*args)
         except Exception as exc:
             raise TemplateRenderError(
-                f"Device {self.id!r}: build() failed for case {info.index} "
-                f"({info.title!r}): {exc}",
-                details={"device": self.id, "case": info.index},
+                f"Device {self.id!r}: {name}() failed for {what}: {exc}",
+                details={"device": self.id},
             ) from exc
 
         if not isinstance(produced, (list, tuple)) or not produced:
             raise TemplateRenderError(
-                f"Device {self.id!r}: build() must return a non-empty list of "
+                f"Device {self.id!r}: {name}() must return a non-empty list of "
                 f"OutputFile; got {type(produced).__name__}.",
                 details={"device": self.id},
             )
@@ -141,8 +168,9 @@ class PythonDevice:
         for item in produced:
             if not isinstance(item, OutputFile):
                 raise TemplateRenderError(
-                    f"Device {self.id!r}: build() returned {type(item).__name__}, "
-                    f"expected OutputFile (use device_api.output()).",
+                    f"Device {self.id!r}: {name}() returned "
+                    f"{type(item).__name__}, expected OutputFile "
+                    f"(use device_api.output()).",
                     details={"device": self.id},
                 )
             resolved.append(
@@ -155,6 +183,11 @@ class PythonDevice:
         return resolved
 
     def _render_template(self, item: OutputFile) -> str:
+        if item.content is not None:
+            # The module built the skeleton itself; variables still apply so
+            # it can mix the two.
+            return self._substitute(item, item.content)
+
         path = self._directory / item.template
         if not path.is_file():
             raise TemplateRenderError(
@@ -166,7 +199,9 @@ class PythonDevice:
         # assembler gets a chance to honour it.
         with open(path, encoding="utf-8", newline="") as handle:
             text = handle.read()
+        return self._substitute(item, text)
 
+    def _substitute(self, item: OutputFile, text: str) -> str:
         missing: list[str] = []
 
         def substitute(match: re.Match[str]) -> str:
@@ -178,10 +213,11 @@ class PythonDevice:
 
         rendered = _VARIABLE_RE.sub(substitute, text)
         if missing:
+            where = item.template or "the content build() supplied"
             raise TemplateRenderError(
-                f"Device {self.id!r}: template {item.template!r} uses "
-                f"@@{'@@, @@'.join(sorted(set(missing)))}@@ but build() supplied "
-                f"no value for it.",
+                f"Device {self.id!r}: {where} uses "
+                f"@@{'@@, @@'.join(sorted(set(missing)))}@@ but build() "
+                f"supplied no value for it.",
                 details={"device": self.id, "template": item.template, "missing": sorted(set(missing))},
             )
         return rendered
@@ -217,7 +253,17 @@ def load_python_device(directory: Path) -> PythonDevice:
             f"define ID, NAME, step_function_name(step) and build(case).",
             details={"path": str(path), "missing": missing},
         )
-    for attr in ("step_function_name", "build"):
+    entry_points = [a for a in ("build", "build_all") if hasattr(module, a)]
+    if len(entry_points) != 1:
+        raise DeviceDefinitionError(
+            f"{path} must define exactly one of build(case) or "
+            f"build_all(cases); it defines "
+            f"{', '.join(entry_points) if entry_points else 'neither'}. Use "
+            f"build(case) when each case gets its own file, build_all(cases) "
+            f"when they all go into the same one.",
+            details={"path": str(path), "defines": entry_points},
+        )
+    for attr in ("step_function_name", *entry_points):
         if not callable(getattr(module, attr)):
             raise DeviceDefinitionError(
                 f"{path}: {attr} must be a function.",

@@ -23,6 +23,19 @@ class ParseOptions(BaseModel):
         "for unrelated sections.",
     )
     case_prefixes: tuple[str, ...] = ("Test Case", "TestCase", "Testcase", "測試案例", "測試用例")
+    case_section: str | None = Field(
+        default=None,
+        description="When set, only headings inside the section with this "
+        "title count as test cases. Lets a plan carry other sections at the "
+        "same heading level without them being mistaken for cases.",
+    )
+    section_heading_level: int | None = Field(
+        default=None,
+        ge=1,
+        le=6,
+        description="Heading level of `case_section`. Defaults to one level "
+        "above `case_heading_level`.",
+    )
 
 
 class GenerateOptions(ParseOptions):

@@ -78,6 +78,53 @@ rather than failing a user's first request.
   descriptions
 - **THEN** generation fails with an error naming the device
 
+### Requirement: A device chooses per-case or whole-plan output
+
+A device SHALL declare whether each case produces its own files or every case
+goes into shared files, by defining exactly one of the two build entry points.
+Defining neither or both SHALL fail at load, because the choice cannot be
+inferred and the wrong one silently loses output: cases sharing a file through
+the per-case entry point would each overwrite the same anchored region.
+
+#### Scenario: Every case in one file
+
+- **WHEN** a device declares whole-plan output and a plan holds two cases
+- **THEN** one file is produced containing both cases' generated code
+
+#### Scenario: One file per case
+
+- **WHEN** a device declares per-case output and a plan holds two cases
+- **THEN** each case produces its own files
+
+#### Scenario: Neither entry point
+
+- **WHEN** a module defines neither entry point
+- **THEN** loading fails and the error names both options
+
+#### Scenario: Both entry points
+
+- **WHEN** a module defines both
+- **THEN** loading fails
+
+### Requirement: A device may build its own skeleton
+
+A device SHALL be able to supply the skeleton for a new output file directly,
+instead of naming a template file. This lets a device insert its anchor
+markers into a template that carries none, so a project's real source file can
+be used as the template without being marked up.
+
+#### Scenario: Markers inserted into an unmarked template
+
+- **WHEN** a device's template contains no anchor markers and its module
+  inserts them while building the skeleton
+- **THEN** the created file contains the marker pairs with the generated code
+  between them
+
+#### Scenario: Neither a template nor content
+
+- **WHEN** a module describes an output with neither
+- **THEN** the error says which output is at fault
+
 ### Requirement: Templates are plain source files with placeholders
 
 A template SHALL be an ordinary source file in the device's folder, carrying

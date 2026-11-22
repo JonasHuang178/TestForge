@@ -27,7 +27,7 @@ EXAMPLES = TESTS_DIR.parent / "examples"
 DEVICES = TESTS_DIR.parent / "devices"
 
 #: One golden set per device, so a change to either device's rules shows up.
-CASES = [("demo_board", "demo_board_plan.md"), ("simple_cpp", "simple_plan.md")]
+CASES = [("demo_board", "demo_board_plan.md"), ("simple_cpp", "console_plan.md")]
 
 
 def test_generated_output_matches_golden() -> None:

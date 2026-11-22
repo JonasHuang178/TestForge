@@ -29,6 +29,7 @@ __all__ = [
     "CaseInfo",
     "OutputFile",
     "output",
+    "read_text",
     "pascal",
     "snake",
     "upper_snake",
@@ -94,8 +95,16 @@ class OutputFile:
     path: str
     """Output filename, e.g. ``test_power_on.cpp``."""
 
-    template: str
-    """A file in the device folder, used when the output does not exist yet."""
+    template: str = ""
+    """A file in the device folder, used when the output does not exist yet.
+
+    Leave empty and set ``content`` instead when the device needs to build the
+    skeleton itself — for instance to insert anchor markers into a template
+    that does not carry any.
+    """
+
+    content: str | None = None
+    """The skeleton verbatim, overriding ``template`` when set."""
 
     anchors: dict[str, str] = field(default_factory=dict)
     """anchor name -> the code to place between its BEGIN and END markers."""
@@ -108,14 +117,37 @@ class OutputFile:
     """
 
 
-def output(path: str, template: str, anchors: dict[str, str] | None = None, **variables: str) -> OutputFile:
-    """Convenience constructor: ``output("a.cpp", "tmpl.cpp", {...}, GUARD="X")``."""
+def output(
+    path: str,
+    template: str = "",
+    anchors: dict[str, str] | None = None,
+    *,
+    content: str | None = None,
+    **variables: str,
+) -> OutputFile:
+    """Describe one output file.
+
+    Either name a ``template`` in the device folder, or pass ``content``
+    already prepared by the module. Passing neither is an error.
+    """
+    if not template and content is None:
+        raise ValueError(f"output({path!r}) needs either a template or content")
     return OutputFile(
         path=path,
         template=template,
+        content=content,
         anchors=dict(anchors or {}),
         variables={k: str(v) for k, v in variables.items()},
     )
+
+
+def read_text(path) -> str:
+    """Read a file from the device folder without touching its line endings.
+
+    Text mode would normalise CRLF to LF before the assembler could honour it.
+    """
+    with open(path, encoding="utf-8", newline="") as handle:
+        return handle.read()
 
 
 # ------------------------------------------------------------------- helpers

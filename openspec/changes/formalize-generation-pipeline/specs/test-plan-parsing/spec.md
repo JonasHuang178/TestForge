@@ -39,6 +39,17 @@ heading is recorded separately and never renumbers the step.
 - **THEN** three steps are produced with positions 1, 2 and 3
 - **AND** the declared numbers are 1, 2 and none respectively
 
+#### Scenario: The step keyword allows a bare space
+
+- **WHEN** a step heading reads `Step 1 Print the version`
+- **THEN** the declared number is 1 and the title is `Print the version`
+
+#### Scenario: A bare leading number needs a separator
+
+- **WHEN** a step heading reads `2024 annual check`, with no step keyword and
+  no separator after the number
+- **THEN** the whole text is the title and no declared number is recorded
+
 #### Scenario: Misnumbered plan keeps document order
 
 - **WHEN** a case contains `## Step 1: A` followed by `## Step 7: B`
@@ -138,6 +149,30 @@ the case heading level for unrelated sections can still be parsed.
 - **WHEN** a plan contains `# Introduction` and `# Test Case: Real` and prefix
   enforcement is enabled
 - **THEN** only `Real` is produced as a case
+
+### Requirement: Cases may be confined to a named section
+
+A device SHALL be able to name the section that holds its test cases. When one
+is named, only headings inside that section count as cases, so a plan can
+carry other sections at the same heading level without them being mistaken for
+cases. When none is named, the whole document is scanned.
+
+#### Scenario: Headings outside the section are ignored
+
+- **WHEN** a plan has a case-level heading under an unrelated section, and
+  another under the named section
+- **THEN** only the one inside the named section becomes a case
+
+#### Scenario: The named section is absent
+
+- **WHEN** the configured section does not appear in the plan
+- **THEN** no cases are produced and an error diagnostic names the section
+
+#### Scenario: Content before the section is not flagged
+
+- **WHEN** a section is configured and the plan has prose and headings above it
+- **THEN** no warning is reported about content preceding the first case,
+  since that is what naming a section exists to permit
 
 ### Requirement: Plans that yield nothing are rejected
 
