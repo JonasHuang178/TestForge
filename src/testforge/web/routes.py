@@ -62,7 +62,12 @@ def index(request: Request, service: GenerationService = Depends(get_service)):
             "id": d.id,
             "name": d.name,
             "description": d.description,
-            "step_heading_level": d.parse_options.step_heading_level,
+            "steps": (
+                "步驟寫成 Step N 文字行"
+                if d.parse_options.step_style == "line"
+                else f"步驟是 H{d.parse_options.step_heading_level} 標題"
+            ),
+            "step_style": d.parse_options.step_style,
             "rules": str(d.directory / "device.py"),
             "example": d.example_plan or "",
         }

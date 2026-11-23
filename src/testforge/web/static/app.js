@@ -1,28 +1,47 @@
 "use strict";
 
-// Deliberately dependency-free. Every interaction here is one fetch plus an
-// innerHTML swap, and the server already returns rendered HTML, so a framework
-// would add a vendored file and a version to maintain without removing code.
-// It also means the page works on an isolated network, which matters for a tool
-// used beside device test benches.
+// Dependency-free on purpose. Every interaction is one fetch plus an innerHTML
+// swap of server-rendered HTML, so a framework would add a vendored file and a
+// version to maintain without removing code. It also means the page works on an
+// isolated network, which matters beside a test bench.
 
 const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 const els = {
   source: $("#source"),
   device: $("#device"),
-  caseSel: $("#case"),
   stepLevel: $("#step-level"),
   preview: $("#preview"),
   previewStatus: $("#preview-status"),
   editorStatus: $("#editor-status"),
   artifacts: $("#artifacts"),
-  generate: $("#generate"),
   advanced: $("#advanced"),
   deviceHint: $("#device-hint"),
   downloadForm: $("#download-form"),
   file: $("#file"),
+  toStep2: $("#to-step-2"),
+  step1Note: $("#step1-note"),
+  fileList: $("#file-list"),
+  downloadSummary: $("#download-summary"),
 };
+
+// ------------------------------------------------------------------- steps
+
+let currentStep = 1;
+
+function goToStep(n) {
+  currentStep = n;
+  $$(".step").forEach((section) => {
+    section.hidden = section.id !== `step-${n}`;
+  });
+  $$("#stepper li").forEach((li) => {
+    const step = Number(li.dataset.step);
+    li.classList.toggle("current", step === n);
+    li.classList.toggle("done", step < n);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
 // ---------------------------------------------------------------- form state
 
@@ -30,7 +49,6 @@ function currentForm() {
   const data = new FormData();
   data.set("source", els.source.value);
   data.set("device_id", els.device.value || "");
-  if (els.caseSel.value) data.set("case_selector", els.caseSel.value);
   if (els.stepLevel.value) data.set("step_level", els.stepLevel.value);
   return data;
 }
@@ -38,8 +56,9 @@ function currentForm() {
 function describeDevice() {
   const opt = els.device.selectedOptions[0];
   if (!opt) return;
-  els.deviceHint.textContent =
-    `步驟標題層級 H${opt.dataset.stepLevel}　規則檔 ${opt.dataset.rules}`;
+  els.deviceHint.textContent = `${opt.dataset.steps}　規則檔 ${opt.dataset.rules}`;
+  // The override only bites when the device reads steps as headings.
+  els.stepLevel.disabled = opt.dataset.style !== "heading";
 }
 
 // ------------------------------------------------------------- live preview
@@ -54,6 +73,13 @@ function schedulePreview(delay = 350) {
 
 async function runPreview() {
   const seq = ++previewSeq;
+  if (!els.source.value.trim()) {
+    els.preview.innerHTML =
+      '<p class="empty">貼上計畫後，這裡會顯示偵測到的 test case 與步驟。</p>';
+    els.previewStatus.textContent = "";
+    setReady(false, "");
+    return;
+  }
   els.previewStatus.textContent = "解析中…";
   try {
     const res = await fetch("/preview", { method: "POST", body: currentForm() });
@@ -62,88 +88,115 @@ async function runPreview() {
     if (seq !== previewSeq) return;
     els.preview.innerHTML = html;
     els.previewStatus.textContent = "";
-    syncCaseOptions();
+
+    const cases = els.preview.querySelectorAll(".case").length;
+    const steps = els.preview.querySelectorAll(".steps li").length;
+    if (res.ok && cases > 0) {
+      setReady(true, `偵測到 ${cases} 個 test case、${steps} 個步驟`);
+    } else {
+      setReady(false, "這份計畫目前無法產生程式碼，請看右側的 diagnostics");
+    }
   } catch (err) {
     if (seq !== previewSeq) return;
     els.previewStatus.textContent = "解析失敗：" + err.message;
+    setReady(false, "");
   }
 }
 
-// Keeps the case selector in step with what the preview actually found, so it
-// can never offer a case number that does not exist.
-function syncCaseOptions() {
-  const cases = [...els.preview.querySelectorAll(".case")];
-  const previous = els.caseSel.value;
-  els.caseSel.innerHTML = '<option value="">全部</option>';
-  cases.forEach((node) => {
-    const opt = document.createElement("option");
-    opt.value = node.dataset.index;
-    const title = node.dataset.title || "";
-    opt.textContent = `${node.dataset.index}. ` + (title.length > 26 ? title.slice(0, 25) + "…" : title);
-    els.caseSel.appendChild(opt);
-  });
-  if (previous && Number(previous) <= cases.length) els.caseSel.value = previous;
+// The step cannot be left until the plan actually yields something, so the
+// user is never carried to an empty result screen.
+function setReady(ready, note) {
+  els.toStep2.disabled = !ready;
+  els.step1Note.textContent = note;
 }
 
 function updateEditorStatus() {
   const text = els.source.value;
   const lines = text ? text.split("\n").length : 0;
-  els.editorStatus.textContent = text
-    ? `${lines} 行　${text.length} 字元`
-    : " ";
+  els.editorStatus.textContent = text ? `${lines} 行　${text.length} 字元` : " ";
 }
 
 // ------------------------------------------------------------------ generate
 
-async function runGenerate() {
-  if (!els.source.value.trim()) {
-    els.artifacts.innerHTML =
-      '<p class="banner error">請先貼上或載入一份測試計畫。</p>';
-    return;
-  }
-  els.generate.disabled = true;
-  els.generate.textContent = "產生中…";
+async function generate() {
+  els.toStep2.disabled = true;
+  els.toStep2.textContent = "產生中…";
   try {
     const res = await fetch("/generate", { method: "POST", body: currentForm() });
     els.artifacts.innerHTML = await res.text();
+
+    if (els.artifacts.querySelector(".banner.error")) {
+      // Generation failed on the plan's content: stay here, where it can be
+      // fixed, rather than showing a result screen with an error on it.
+      els.preview.innerHTML = els.artifacts.innerHTML;
+      els.artifacts.innerHTML = "";
+      setReady(false, "產生失敗，請看右側說明");
+      return;
+    }
+
     highlightAll();
-    bindArtifacts();
-    els.artifacts.scrollIntoView({ behavior: "smooth", block: "start" });
+    bindTabs();
+    fillDownloadStep();
+    goToStep(2);
   } catch (err) {
-    els.artifacts.innerHTML =
-      '<p class="banner error">產生失敗：' + escapeHtml(err.message) + "</p>";
+    els.step1Note.textContent = "產生失敗：" + err.message;
   } finally {
-    els.generate.disabled = false;
-    els.generate.textContent = "產生程式碼";
+    els.toStep2.textContent = "產生程式碼 →";
+    els.toStep2.disabled = false;
   }
 }
 
-function bindArtifacts() {
-  const tabs = [...els.artifacts.querySelectorAll(".tab")];
-  const panes = [...els.artifacts.querySelectorAll(".artifact")];
-  const fileButton = els.artifacts.querySelector('[data-download="file"]');
-
+function bindTabs() {
+  const tabs = $$("#artifacts .tab");
+  const panes = $$("#artifacts .artifact");
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       tabs.forEach((t) => t.classList.toggle("active", t === tab));
       panes.forEach((p) => (p.hidden = p.id !== tab.dataset.target));
-      const shown = panes.find((p) => !p.hidden);
-      if (fileButton && shown) fileButton.dataset.path = shown.dataset.path;
     });
-  });
-
-  els.artifacts.querySelectorAll("[data-download]").forEach((btn) => {
-    btn.addEventListener("click", () => submitDownload(btn.dataset.download, btn.dataset.path));
   });
 }
 
-// A real form post rather than fetch: the browser then handles the file dialog
+function fillDownloadStep() {
+  const summary = $("#artifacts .summary");
+  if (summary) {
+    els.downloadSummary.textContent =
+      `${summary.dataset.cases} 個 test case、${summary.dataset.steps} 個步驟，` +
+      `產生 ${summary.dataset.files} 個檔案。`;
+  }
+
+  const panes = $$("#artifacts .artifact");
+  // An archive of one file is just a slower way to download that file.
+  $(".download-actions").hidden = panes.length < 2;
+
+  els.fileList.innerHTML = "";
+  panes.forEach((pane) => {
+    const path = pane.dataset.path;
+    const li = document.createElement("li");
+
+    const name = document.createElement("code");
+    name.textContent = path;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    // With one file this is the whole point of the step, so it leads; with
+    // several, a row of green buttons would just be noise.
+    button.className = panes.length === 1 ? "primary" : "ghost";
+    button.textContent = "下載";
+    button.addEventListener("click", () => submitDownload("file", path));
+
+    li.append(name, button);
+    els.fileList.appendChild(li);
+  });
+}
+
+// A real form post rather than fetch: the browser then handles the save dialog
 // and the Content-Disposition filename itself.
 function submitDownload(what, path) {
   const f = els.downloadForm;
   f.source.value = els.source.value;
   f.device_id.value = els.device.value || "";
-  f.case_selector.value = els.caseSel.value || "";
+  f.case_selector.value = "";
   f.step_level.value = els.stepLevel.value || "";
   f.what.value = what;
   f.path.value = path || "";
@@ -163,8 +216,8 @@ const CPP_KEYWORDS = [
   "virtual", "void", "volatile", "while",
 ];
 
-// One pass, alternation ordered so that comments and strings win over anything
-// they contain. Tokenising the raw text and escaping each piece as the output is
+// One pass, alternation ordered so comments and strings win over anything they
+// contain. Tokenising the raw text and escaping each piece as the output is
 // built avoids the usual bug of running the pattern over pre-escaped HTML,
 // where an escaped quote no longer looks like a string delimiter.
 const CPP_PATTERN = new RegExp(
@@ -205,7 +258,7 @@ function highlightCpp(code) {
 }
 
 function highlightAll() {
-  els.artifacts.querySelectorAll("pre.code > code").forEach((node) => {
+  $$("#artifacts pre.code > code").forEach((node) => {
     node.innerHTML = highlightCpp(node.textContent);
   });
 }
@@ -222,14 +275,22 @@ els.device.addEventListener("change", () => {
   schedulePreview(0);
 });
 els.stepLevel.addEventListener("change", () => schedulePreview(0));
-els.generate.addEventListener("click", runGenerate);
+
+els.toStep2.addEventListener("click", generate);
+$("#to-step-3").addEventListener("click", () => goToStep(3));
+$("#back-to-1").addEventListener("click", () => goToStep(1));
+$("#back-to-2").addEventListener("click", () => goToStep(2));
+$("#restart").addEventListener("click", () => goToStep(1));
+$$("[data-download='zip']").forEach((b) =>
+  b.addEventListener("click", () => submitDownload("zip"))
+);
 
 $("#toggle-advanced").addEventListener("click", () => {
   els.advanced.hidden = !els.advanced.hidden;
 });
 
-// Each device ships its own sample, because a plan written for one device's
-// heading conventions parses to nothing under another's.
+// Each device ships its own sample: a plan written for one device's heading
+// conventions parses to nothing under another's.
 function examplePlanFor(deviceId) {
   const node = document.querySelector(`.example-plan[data-device="${deviceId}"]`);
   // textContent, not innerHTML: the browser has already decoded the entities.
@@ -256,9 +317,7 @@ function syncExampleButton() {
 $("#clear").addEventListener("click", () => {
   els.source.value = "";
   updateEditorStatus();
-  els.preview.innerHTML =
-    '<p class="empty">貼上計畫後，這裡會顯示偵測到的 test case 與步驟。</p>';
-  els.caseSel.innerHTML = '<option value="">全部</option>';
+  schedulePreview(0);
 });
 
 // Read the file in the browser: no upload endpoint, no multipart handling.
@@ -278,3 +337,4 @@ els.file.addEventListener("change", (ev) => {
 describeDevice();
 syncExampleButton();
 updateEditorStatus();
+goToStep(1);

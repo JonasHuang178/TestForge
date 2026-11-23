@@ -9,12 +9,10 @@
     {% endfor %}
   </div>
   <div class="artifact-actions">
-    <span class="muted summary">
+    <span class="muted summary" data-cases="{{ summary.cases }}"
+          data-steps="{{ summary.steps }}" data-files="{{ artifacts | length }}">
       {{ summary.cases }} case / {{ summary.steps }} 步驟 / {{ artifacts | length }} 檔案
     </span>
-    <button type="button" class="ghost" data-download="file"
-            data-path="{{ artifacts[0].path }}" id="dl-file">下載此檔</button>
-    <button type="button" class="ghost" data-download="zip">下載 zip</button>
   </div>
 </div>
 

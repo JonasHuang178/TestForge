@@ -176,3 +176,45 @@ def test_web_routes_are_absent_from_the_api_schema(client: TestClient) -> None:
     assert "/" not in paths
     assert "/generate" not in paths
     assert "/preview" not in paths
+
+
+# -- the three-step flow ----------------------------------------------------
+#
+# The page is a wizard: choose a device and a plan, confirm the generated
+# code, then download. These assert the structure the script drives; the
+# navigation itself is exercised in a browser.
+
+
+def test_page_has_the_three_steps(client: TestClient) -> None:
+    body = client.get("/").text
+    for step in ("step-1", "step-2", "step-3"):
+        assert f'id="{step}"' in body
+    # Only the first is visible on load.
+    assert '<section class="step" id="step-1">' in body
+    assert '<section class="step" id="step-2" hidden>' in body
+    assert '<section class="step" id="step-3" hidden>' in body
+
+
+def test_page_offers_each_devices_own_example(client: TestClient) -> None:
+    body = client.get("/").text
+    assert 'class="example-plan" data-device="simple_cpp"' in body
+    # The sample must be the device's, not one fixed plan for every device.
+    assert "Test Case List" in body
+
+
+def test_device_option_describes_how_steps_are_read(client: TestClient) -> None:
+    # A step heading level says nothing about a device that reads steps as
+    # plain lines, so the option carries the style instead.
+    body = client.get("/").text
+    assert 'data-style="line"' in body
+    assert "Step N" in body
+
+
+def test_generated_fragment_carries_the_summary_for_the_download_step(
+    client: TestClient,
+) -> None:
+    response = client.post("/generate", data={"source": PLAN, "device_id": "simple_cpp"})
+    assert 'data-cases="1"' in response.text
+    assert 'data-files="1"' in response.text
+    # The paths drive the per-file download buttons on step 3.
+    assert 'data-path="test_main.cpp"' in response.text
