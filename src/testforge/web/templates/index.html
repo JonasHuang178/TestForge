@@ -14,13 +14,21 @@
     <strong>TestForge</strong>
     <span class="muted">從 markdown 測試計畫產生 C++ 測試程式碼</span>
   </div>
-
-  <ol class="stepper" id="stepper">
-    <li data-step="1" class="current"><span class="n"><span>1</span></span>輸入計畫</li>
-    <li data-step="2"><span class="n"><span>2</span></span>確認結果</li>
-    <li data-step="3"><span class="n"><span>3</span></span>下載</li>
-  </ol>
 </header>
+
+<nav class="stepper-row">
+  <ol class="stepper" id="stepper">
+    <li data-step="1" class="current">
+      <span class="n"><span>1</span></span><span class="label">輸入計畫</span>
+    </li>
+    <li data-step="2">
+      <span class="n"><span>2</span></span><span class="label">確認結果</span>
+    </li>
+    <li data-step="3">
+      <span class="n"><span>3</span></span><span class="label">下載</span>
+    </li>
+  </ol>
+</nav>
 
 <!-- ───────────────────────── step 1 ───────────────────────── -->
 <section class="step" id="step-1">
@@ -82,8 +90,10 @@
   </div>
 
   <footer class="step-actions">
-    <span class="muted" id="step1-note"></span>
-    <button type="button" id="to-step-2" class="primary" disabled>產生程式碼 →</button>
+    <p class="step-note muted" id="step1-note"></p>
+    <div class="buttons">
+      <button type="button" id="to-step-2" class="primary" disabled>產生程式碼 →</button>
+    </div>
   </footer>
 </section>
 
@@ -99,8 +109,10 @@
   <div id="artifacts" class="scroll-tall"></div>
 
   <footer class="step-actions">
-    <button type="button" id="back-to-1" class="ghost">← 上一步</button>
-    <button type="button" id="to-step-3" class="primary">確認，前往下載 →</button>
+    <div class="buttons">
+      <button type="button" id="back-to-1" class="ghost">← 上一步</button>
+      <button type="button" id="to-step-3" class="primary">確認，前往下載 →</button>
+    </div>
   </footer>
 </section>
 
@@ -118,8 +130,10 @@
   </div>
 
   <footer class="step-actions">
-    <button type="button" id="back-to-2" class="ghost">← 上一步</button>
-    <button type="button" id="restart" class="ghost">重新開始</button>
+    <div class="buttons">
+      <button type="button" id="back-to-2" class="ghost">← 上一步</button>
+      <button type="button" id="restart" class="ghost">重新開始</button>
+    </div>
   </footer>
 </section>
 

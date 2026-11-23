@@ -75,11 +75,19 @@ body {
 
 .bar {
   display: flex; flex-wrap: wrap; gap: 12px 20px;
-  align-items: center; justify-content: space-between;
+  align-items: center;
   padding: 10px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 5;
+}
+
+/* The stepper gets a row of its own below the title, centred, so it reads as
+   where-you-are rather than as part of the branding. */
+.stepper-row {
+  display: flex; justify-content: center;
+  padding: 20px 16px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
 .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -87,28 +95,43 @@ body {
 .brand .muted { font-size: 13px; }
 
 .stepper {
-  display: flex; align-items: center; gap: 4px;
+  --dot: 46px;
+  --gap: 10px;
+  display: flex; align-items: flex-start;
   list-style: none; margin: 0; padding: 0;
   font-size: 13px; color: var(--muted);
 }
+
 .stepper li {
-  display: flex; align-items: center; gap: 8px;
-  padding: 4px 12px 4px 4px;
-  border-radius: 999px;
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  width: clamp(104px, 26vw, 180px);
 }
-/* The connector is drawn on the item rather than between them, so wrapping
-   on a narrow screen cannot leave a dangling line. */
-.stepper li + li::before {
-  content: ""; width: 14px; height: 1px;
-  background: var(--border); margin-right: 6px;
+.stepper .label { text-align: center; line-height: 1.3; }
+
+/* The connector runs from the edge of this circle to the edge of the next.
+   Anchored to the item rather than drawn as a separate element, so the row
+   stays exactly three items wide and centres on its own. */
+.stepper li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--dot) / 2 - 1px);
+  left: calc(50% + var(--dot) / 2 + var(--gap));
+  right: calc(-50% + var(--dot) / 2 + var(--gap));
+  height: 2px;
+  background: var(--border);
 }
-/* The circle carries the state; the label beside it is a caption. */
+/* A finished step's connector is green, so progress reads along the line. */
+.stepper li.done::after { background: var(--accent); }
+/* The circle carries the state; the label below it is a caption. */
 .stepper .n {
   display: inline-grid; place-items: center;
-  width: 30px; height: 30px; border-radius: 50%;
+  width: var(--dot); height: var(--dot); border-radius: 50%;
   background: var(--surface); color: var(--muted);
-  font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;
+  font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums;
   border: 2px solid var(--border);
+  /* Above the connector, so the line stops at the circle's edge. */
+  position: relative; z-index: 1;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
@@ -126,7 +149,7 @@ body {
   background: transparent; color: var(--accent); border-color: var(--accent);
 }
 .stepper li.done .n::after { content: "✓"; }
-.stepper li.done .n { font-size: 15px; }
+.stepper li.done .n { font-size: 21px; }
 /* The number is replaced by the tick, not accompanied by it. */
 .stepper li.done .n span { display: none; }
 
@@ -182,7 +205,7 @@ button.ghost { font-size: 13px; padding: 5px 10px; }
    page. */
 .step {
   display: flex; flex-direction: column;
-  min-height: calc(100vh - 53px);
+  min-height: calc(100vh - 53px - 95px);
 }
 .step > .panes { flex: 1; }
 .step-actions { margin-top: auto; }
@@ -200,12 +223,13 @@ button.ghost { font-size: 13px; padding: 5px 10px; }
 .step-intro p { margin: 0; font-size: 13px; }
 
 .step-actions {
-  display: flex; align-items: center; justify-content: flex-end;
-  gap: 10px; padding: 12px 16px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px; padding: 14px 16px 18px;
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
-.step-actions .muted { margin-right: auto; font-size: 13px; }
+.step-actions .buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.step-note { margin: 0; font-size: 13px; text-align: center; min-height: 1.2em; }
 
 .scroll-tall { padding: 0 16px 4px; }
 
@@ -373,7 +397,6 @@ pre.code code { font: inherit; }
   .panes { grid-template-columns: minmax(0, 1fr); }
   textarea { min-height: 34vh; }
   .bar { gap: 10px; }
-  .stepper { width: 100%; justify-content: space-between; font-size: 12px; }
-  .stepper li { padding-right: 8px; }
-  .stepper li + li::before { width: 8px; margin-right: 2px; }
+  .stepper { --dot: 40px; --gap: 7px; font-size: 12px; }
+  .stepper-row { padding: 16px 10px 12px; }
 }
